@@ -1,0 +1,23 @@
+name = "torchlib"
+version = "0.1.0"
+defaultTargets = ["TorchLib"]
+testDriver = "runTests"
+
+[leanOptions]
+weak.linter.flexible = true
+weak.linter.pythonStyle = false
+weak.linter.checkInitImports = false
+weak.linter.allScriptsDocumented = false
+
+[[lean_lib]]
+name = "TorchLib"
+globs = ["TorchLib.*"]
+
+[[lean_lib]]
+name = "TorchLibTests"
+globs = ["TorchLibTests.+"]
+
+[[lean_exe]]
+name = "runTests"
+srcDir = "scripts"
+root = "RunTests"
