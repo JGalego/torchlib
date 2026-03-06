@@ -43,7 +43,7 @@ instance : Inhabited (Linear Float) where
 /-- Input dimensionality (8 × 8 = 64, a miniature "MNIST" image). -/
 def inputDim  : Nat := 64
 /-- Hidden layer dimensions.  Length = number of hidden layers. -/
-def hiddenDims : List Nat := [32, 16]
+def hiddenDims : List Nat := [32]
 /-- Number of output classes. -/
 def numClasses : Nat := 10
 /-- Number of samples per class in the training set. -/
@@ -297,28 +297,28 @@ def main : IO Unit := do
   -- 0. Load dataset
   let ds ← loadMnistCsv
   IO.println s!"\nDataset: {ds.source}"
-  IO.println s!"  train samples: {ds.numTrain}  |  test samples: {ds.numTest}"
+  IO.println s!"train samples: {ds.numTrain}  |  test samples: {ds.numTest}"
 
   -- 1. Train the network
   let archStr := String.intercalate " → " <|
     [toString inputDim] ++ hiddenDims.map toString ++ [toString numClasses]
   IO.println ""
-  IO.println s!"=== Training MLP({archStr}) ==="
-  let model ← trainMLP ds.trainXs ds.trainYs 200 (lr := 0.1)
+  IO.println s!"=== Training MLP({archStr}) ===\n"
+  let model ← trainMLP ds.trainXs ds.trainYs 200 (lr := 0.01)
 
   -- 1b. Train & test accuracy
   IO.println ""
   IO.println "=== Accuracy ==="
   let (trainCorrect, trainTotal) := computeAccuracy model ds.trainXs ds.trainLabels
   let trainAcc := Float.ofNat trainCorrect / Float.ofNat (max trainTotal 1) * 100.0
-  IO.println s!"  train: {trainCorrect}/{trainTotal} ({trainAcc}%)"
+  IO.println s!"train: {trainCorrect}/{trainTotal} ({trainAcc}%)"
   let (testCorrect, testTotal) := computeAccuracy model ds.testXs ds.testLabels
   let testAcc := Float.ofNat testCorrect / Float.ofNat (max testTotal 1) * 100.0
-  IO.println s!"  test:  {testCorrect}/{testTotal} ({testAcc}%)"
+  IO.println s!"test:  {testCorrect}/{testTotal} ({testAcc}%)"
 
   -- 2. Nominal forward pass on the first test digit
   IO.println ""
-  IO.println "=== Nominal forward pass (first test digit) ==="
+  IO.println "=== Nominal forward pass (first test digit) ===\n"
   let x0 : Tensor Float :=
     { shape := [1, inputDim]
       data  := ds.testXs.data.extract 0 inputDim }
@@ -331,8 +331,8 @@ def main : IO Unit := do
 
   -- 3. IBP certification sweep
   IO.println ""
-  IO.println "=== IBP certification sweep ==="
-  IO.println "  Checking: ∀ x′ ∈ B_ε(x₀), argmax f(x′) = predicted class"
+  IO.println "=== IBP certification sweep ===\n"
+  IO.println "Checking: ∀ x′ ∈ B_ε(x₀), argmax f(x′) = predicted class"
   IO.println ""
   for eps in ([0.001, 0.005, 0.01, 0.02, 0.05, 0.1] : List Float) do
     let (lo, hi) := ibpCertify model x0 eps
@@ -348,19 +348,19 @@ def main : IO Unit := do
       return best
     let margin := classLo - rivalHi
     let status := if certified then "CERTIFIED ✓" else "not certified"
-    IO.println s!"  ε = {eps}:  margin = {margin}  → {status}"
+    IO.println s!"ε = {eps}:  margin = {margin}  → {status}"
 
   -- 4. Certificate module (IBPChecker)
   IO.println ""
-  IO.println "=== IBPChecker (Certificate module) ==="
+  IO.println "=== IBPChecker (Certificate module) ===\n"
   let checker : IBPChecker := { model }
   let query := CertQuery.localRobustness x0 0.005 predClass
   let result := Checker.check checker query
   match result with
   | .certified lo hi =>
-    IO.println s!"  Result: CERTIFIED"
-    IO.println s!"  lo bounds (first 5): {reprStr (lo.data.extract 0 5)}"
-    IO.println s!"  hi bounds (first 5): {reprStr (hi.data.extract 0 5)}"
+    IO.println s!"Result: CERTIFIED"
+    IO.println s!"lo bounds (first 5): {reprStr (lo.data.extract 0 5)}"
+    IO.println s!"hi bounds (first 5): {reprStr (hi.data.extract 0 5)}"
   | .violated ce =>
     IO.println s!"  Result: VIOLATED (counter-example dims = {ce.numel})"
   | .unknown reason =>
@@ -368,7 +368,7 @@ def main : IO Unit := do
 
   -- 5. Issue and serialise a certificate
   IO.println ""
-  IO.println "=== Certificate serialisation ==="
+  IO.println "=== Certificate serialisation ===\n"
   let (lo5, hi5) := ibpCertify model x0 0.005
   let cert : Certificate :=
     { query    := s!"localRobustness(center=x0, eps=0.005, class={predClass})"
@@ -380,9 +380,9 @@ def main : IO Unit := do
   IO.println (cert.serialise)
 
   -- 6. Independent re-verification
-  IO.println "=== Re-verification ==="
+  IO.println "=== Re-verification ===\n"
   let (freshLo, freshHi) := ibpCertify model x0 0.005
   let ok := cert.verify freshLo freshHi
-  IO.println s!"  Fresh bounds match certificate: {ok}"
+  IO.println s!"Fresh bounds match certificate: {ok}"
 
 #eval! main
