@@ -107,6 +107,31 @@ lake env lean examples/Verification.lean
 lake env lean examples/VerificationMNIST.lean
 ```
 
+## TorchLean vs TorchLib
+
+Here's a feature-by-feature comparison between [TorchLean](assets/docs/TorchLean.md) and this implementation:
+
+✅ = implemented &nbsp; 🚧 = partial / stub &nbsp; ❌ = not implemented
+
+| Feature | TorchLean (paper) | TorchLib (impl) |
+|---|:---:|:---:|
+| Eager API (layers, models, training) | ✅ | ✅ |
+| Compiled mode (lower to SSA/DAG IR) | ✅ | 🚧 |
+| Op-tagged SSA/DAG IR + interpreter | ✅ | ✅ |
+| IEEE-754 binary32 kernel (IEEE32Exec) | ✅ | ❌ |
+| Proof-relevant rounding models | ✅ | ❌ |
+| Reverse-mode autograd | ✅ | ✅ |
+| Optimisers (SGD, Adam, AdamW, RMSProp) | ✅ | ✅ |
+| IBP bound propagation | ✅ | ✅ |
+| CROWN / LiRPA back-substitution | ✅ | ✅ |
+| α-CROWN (learnable slopes) | ✅ | 🚧 |
+| Certificate checking | ✅ | ✅ |
+| Certified robustness (end-to-end) | ✅ | ✅ |
+| PINN residual bounds | ✅ | ❌ |
+| Lyapunov controller verification | ✅ | ❌ |
+| Universal approximation theorem | ✅ | ❌ |
+| Checkpoint import / export | ✅ | ✅ |
+
 ## License
 
 This project is licensed under the Apache 2.0 License. See [LICENSE](LICENSE) for details.

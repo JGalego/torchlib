@@ -7,8 +7,11 @@ Neural networks are increasingly deployed in safety- and mission-critical pipeli
 # Key Contributions
 
 PyTorch-style verified API in Lean 4 with eager and compiled modes that lower to an op-tagged SSA/DAG computation-graph IR.
+
 Explicit Float32 semantics via an executable IEEE-754 binary32 kernel and proof-relevant rounding models.
+
 Verification via IBP and CROWN/LiRPA-style bound propagation with certificate checking.
+
 End-to-end validation on certified robustness, PINN residual bounds, and Lyapunov-style neural controller verification, plus mechanized theory results (including a universal approximation theorem).
 
 # System Modules
