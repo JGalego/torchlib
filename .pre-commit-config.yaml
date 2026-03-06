@@ -1,0 +1,33 @@
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      - id: gitleaks
+  - repo: local
+    hooks:
+      - id: lake-update
+        name: Lake Update
+        entry: lake update
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: lake-build
+        name: Lake Build
+        entry: lake build
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: lake-test
+        name: Lake Test
+        entry: lake test
+        language: system
+        pass_filenames: false
+        always_run: true
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.13.9
+    hooks:
+      - id: commitizen
+      - id: commitizen-branch
+        stages: [pre-push]
