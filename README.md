@@ -1,5 +1,7 @@
 # TorchLib
 
+![mission](https://img.shields.io/badge/mission-make_it_formal-purple) ![license](https://img.shields.io/badge/license-MIT-lightgrey.svg) ![PR Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen) ![last commit](https://img.shields.io/github/last-commit/JGalego/torchlib)
+
 A [Lean 4](https://lean-lang.org/) library for neural network modeling, training, and formal verification.
 
 > ⚠️ **Warning:** This module is a work in progress and may contain incomplete features, placeholders, and breaking changes. Use with caution and refer to the source code for the latest status.
