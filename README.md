@@ -87,40 +87,19 @@ lake env lean TorchLibTests/Autograd.lean
 lake env lean TorchLibTests/IBP.lean
 ```
 
-## Usage
+## Examples
 
-### Defining a Model
+Runnable examples live in the [`examples/`](examples/) directory.
 
-```lean
-import TorchLib
+Each file is self-contained and can be checked individually:
 
-open TorchLib
-
-def myModel : Model := sequential [
-  linear 784 128,
-  relu,
-  linear 128 10
-]
-```
-
-### Training
-
-```lean
-import TorchLib.Runtime.Training
-
-def main : IO Unit := do
-  let model := myModel
-  let opt   := sgd (lr := 0.01)
-  trainLoop model opt dataset epochs := 10
-```
-
-### Verification with IBP
-
-```lean
-import TorchLib.Verification.IBP
-
--- Compute certified output bounds under input perturbation ε
-let bounds := ibp myModel input ε
+```sh
+lake env lean examples/Tensors.lean
+lake env lean examples/LinearLayer.lean
+lake env lean examples/MLP.lean
+lake env lean examples/Autograd.lean
+lake env lean examples/Training.lean
+lake env lean examples/Verification.lean
 ```
 
 ## License
