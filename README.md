@@ -1,10 +1,12 @@
 # TorchLib
 
-A Lean 4 library for neural network modeling, training, and formal verification.
+A [Lean 4](https://lean-lang.org/) library for neural network modeling, training, and formal verification.
 
->  ⚠️ **Warning:** This package is a work in progress and may contain incomplete features, placeholders, and breaking changes. Use with caution and refer to the source code for the latest status.
+> ⚠️ **Warning:** This module is a work in progress and may contain incomplete features, placeholders, and breaking changes. Use with caution and refer to the source code for the latest status.
 
-> Adapted from [TorchLean](https://leandojo.org/torchlean.html) by George *et al.* (2026)
+> 🎖️ **Acknowledgments:** This project is inspired by the design of [PyTorch](https://pytorch.org/) via [TorchLean](https://leandojo.org/torchlean.html) (George *et al.*, 2026) and [CSLib](https://www.cslib.io/). A warm thanks to the PyTorch and Lean communities for their support, and to everyone crazy enough to live at the intersection of formal verification and machine learning!
+
+![TorchLib](TorchLib.png)
 
 ## Overview
 
