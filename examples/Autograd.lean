@@ -14,8 +14,14 @@ in reverse during `backward` to accumulate gradients.
 
 open TorchLib TorchLib.Runtime
 
+/-- Print a labelled value to stdout using its `Repr` instance. -/
 private def say [Repr α] (label : String) (v : α) : IO Unit :=
   IO.println s!"{label}: {reprStr v}"
+
+/-- Default `Variable` used as a fallback for `Array.headD` when the
+    autograd engine returns an empty output list. -/
+private def defaultVar (shape : Shape) : Variable :=
+  { id := 0, data := Tensor.zeros shape, requiresGrad := false }
 
 -- ---------------------------------------------------------------------------
 -- Helper: create engine, variables, run backward, read gradient
@@ -32,7 +38,7 @@ def exReluGrad : IO Unit := do
 
   -- Forward: y = relu(x)
   let ys ← eng.apply .relu [x]
-  let y := ys.headD { id := 0, data := Tensor.zeros [1, 1], requiresGrad := false }
+  let y := ys.headD (defaultVar [1, 1])
 
   -- Backward from y (seed gradient = 1.0)
   let tape ← eng.backward y
@@ -60,11 +66,11 @@ def exSquaredLoss : IO Unit := do
 
   -- diff = x - target
   let diffs ← eng.apply .sub [x, tgt]
-  let diff  := diffs.headD { id := 0, data := Tensor.zeros [1], requiresGrad := false }
+  let diff  := diffs.headD (defaultVar [1])
 
   -- loss = diff * diff  (element-wise)
   let losses ← eng.apply .mul [diff, diff]
-  let loss   := losses.headD { id := 0, data := Tensor.zeros [1], requiresGrad := false }
+  let loss   := losses.headD (defaultVar [1])
 
   -- Backward
   let tape ← eng.backward loss
@@ -91,15 +97,15 @@ def exSigmoidChain : IO Unit := do
 
   -- pre-activation: z = w * x
   let wxs ← eng.apply .mul [w, x]
-  let wx  := wxs.headD { id := 0, data := Tensor.zeros [1], requiresGrad := false }
+  let wx  := wxs.headD (defaultVar [1])
 
   -- z = wx + b
   let zs ← eng.apply .add [wx, b]
-  let z  := zs.headD { id := 0, data := Tensor.zeros [1], requiresGrad := false }
+  let z  := zs.headD (defaultVar [1])
 
   -- y = sigmoid(z)
   let ys ← eng.apply .sigmoid [z]
-  let y  := ys.headD { id := 0, data := Tensor.zeros [1], requiresGrad := false }
+  let y  := ys.headD (defaultVar [1])
 
   -- Backward
   let tape ← eng.backward y
@@ -113,6 +119,9 @@ def exSigmoidChain : IO Unit := do
 -- VJP rules reference via `vjp`
 -- ---------------------------------------------------------------------------
 
+-- Unlike the examples above, `vjp` is a pure (non-IO) function — no engine
+-- or tape is needed.  It computes one vector-Jacobian product directly.
+
 -- Inspect the exp VJP: d/dx exp(x) = exp(x), evaluated at x=0 → grad=1
 def exExpVjp : List (Tensor Float) :=
   let x   : Tensor Float := { shape := [1], data := #[0.0] }
@@ -120,3 +129,14 @@ def exExpVjp : List (Tensor Float) :=
   vjp .exp [x] dL
 
 #eval say "exp VJP at x=0" exExpVjp
+
+-- ---------------------------------------------------------------------------
+-- Main
+-- ---------------------------------------------------------------------------
+
+def main : IO Unit := do
+  exReluGrad
+  exSquaredLoss
+  exSigmoidChain
+  IO.println ""
+  say "exp VJP at x=0" exExpVjp

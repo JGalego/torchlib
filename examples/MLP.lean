@@ -11,6 +11,7 @@ and `CNN` models from `TorchLib.Models`.
 
 open TorchLib
 
+/-- Print a labelled value to stdout using its `Repr` instance. -/
 private def say [Repr α] (label : String) (v : α) : IO Unit :=
   IO.println s!"{label}: {reprStr v}"
 
@@ -69,6 +70,13 @@ def y2 : Tensor Float := MLP.forward tiny x2
 def mlpDrop : MLP Float := MLP.init 32 [64, 32] 10 (dropoutP := 0.5)
 #eval say "mlpDrop.dropout.p" mlpDrop.dropout.p
 
+-- Forward pass with dropout: some activations are zeroed during training
+def dropInput : Tensor Float := Tensor.ones [1, 32]
+def dropOut   : Tensor Float := MLP.forward mlpDrop dropInput
+
+#eval say "dropOut.shape" dropOut.shape
+#eval say "dropOut.data"  dropOut.data
+
 -- ---------------------------------------------------------------------------
 -- CNN: convolutional network
 -- ---------------------------------------------------------------------------
@@ -79,3 +87,39 @@ def cnn : CNN Float :=
 
 #eval say "cnn.convBlocks.size" cnn.convBlocks.size
 #eval say "cnn.head.outputSize" cnn.head.outputSize
+
+-- Forward pass: input [batch, C_in=1, H=9, W=9].
+-- After two k=3 convolutions (stride 1, no padding): 9→7→5,
+-- so the flat feature size is 16×5×5 = 400, matching `flatSize`.
+def cnnInput  : Tensor Float := Tensor.full [1, 1, 9, 9] 0.5
+def cnnLogits : Tensor Float := CNN.forward cnn cnnInput
+
+#eval say "cnnLogits.shape" cnnLogits.shape
+#eval say "cnnLogits.data"  cnnLogits.data
+
+-- ---------------------------------------------------------------------------
+-- Main
+-- ---------------------------------------------------------------------------
+
+def main : IO Unit := do
+  IO.println "=== MLP ==="
+  say "mlp.layers.size" mlp.layers.size
+  say "mlp.outputSize"  mlp.outputSize
+  say "logits.shape" logits.shape
+  say "batchLogits.shape" batchLogits.shape
+
+  IO.println "\n=== Tiny MLP ==="
+  say "tiny weight shapes" (tiny.layers.map (fun l => l.weight.shape))
+  say "tiny bias shapes"   (tiny.layers.map (fun l => l.bias.shape))
+  say "y2.shape" y2.shape
+
+  IO.println "\n=== MLP with dropout ==="
+  say "mlpDrop.dropout.p" mlpDrop.dropout.p
+  say "dropOut.shape" dropOut.shape
+  say "dropOut.data"  dropOut.data
+
+  IO.println "\n=== CNN ==="
+  say "cnn.convBlocks.size" cnn.convBlocks.size
+  say "cnn.head.outputSize" cnn.head.outputSize
+  say "cnnLogits.shape" cnnLogits.shape
+  say "cnnLogits.data"  cnnLogits.data

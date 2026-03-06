@@ -8,6 +8,7 @@ Demonstrates the core `Tensor` and `Shape` API from `TorchLib.Core`.
 
 open TorchLib
 
+/-- Print a labelled value to stdout using its `Repr` instance. -/
 private def say [Repr α] (label : String) (v : α) : IO Unit :=
   IO.println s!"{label}: {reprStr v}"
 
@@ -66,6 +67,8 @@ def reluPos : Tensor Float := x.map Scalar.relu
 def mat24 : Tensor Float := Tensor.ones [2, 4]
 
 -- Reshape to [4, 2]
+-- Note: `reshape` returns `Option (Tensor α)` — `none` when the total
+-- element count of the new shape does not match the original tensor.
 #eval say "mat24.reshape [4,2]"  ((mat24.reshape [4, 2]).map (·.shape))
 
 -- Flatten to [8]
@@ -93,3 +96,54 @@ def I2 : Tensor Float := { shape := [2, 2], data := #[1, 0, 0, 1] }
 def A2 : Tensor Float := { shape := [2, 2], data := #[1, 2, 3, 4] }
 
 #eval say "A2 @ I2" (Tensor.matmul A2 I2).data
+
+-- ---------------------------------------------------------------------------
+-- Edge cases: what can go wrong
+-- ---------------------------------------------------------------------------
+
+-- Reshape with mismatched element count → `none`
+#eval say "bad reshape (3×4 → 2×2)" (zeros34.reshape [2, 2])   -- none
+
+-- Matmul with incompatible inner dimensions silently returns the left
+-- operand unchanged (the catch-all branch in `Tensor.matmul`).
+def badMul : Tensor Float :=
+  Tensor.matmul ({ shape := [2, 3], data := #[1, 2, 3, 4, 5, 6] } : Tensor Float)
+              ({ shape := [4, 5], data := Array.replicate 20 1.0 } : Tensor Float)
+
+#eval say "bad matmul shape (expect [2,3])" badMul.shape  -- [2, 3], not an error!
+
+-- ---------------------------------------------------------------------------
+-- Main
+-- ---------------------------------------------------------------------------
+
+def main : IO Unit := do
+  IO.println "=== Construction ==="
+  say "zeros34.shape" zeros34.shape
+  say "zeros34.numel" zeros34.numel
+  say "zeros34.rank"  zeros34.rank
+  say "half23.data"   half23.data
+
+  IO.println "\n=== Arithmetic ==="
+  say "x + y"   (x + y).data
+  say "x * y"   (x * y).data
+  say "y - x"   (y - x).data
+  say "4.0 * x" (Tensor.smul 4.0 x).data
+
+  IO.println "\n=== Element-wise map ==="
+  say "relu5.data"   relu5.data
+  say "reluPos.data" reluPos.data
+
+  IO.println "\n=== Reshape and flatten ==="
+  say "mat24.reshape [4,2]"  ((mat24.reshape [4, 2]).map (·.shape))
+  say "mat24.flatten.shape" mat24.flatten.shape
+
+  IO.println "\n=== Transpose ==="
+  say "mat23.transpose.shape" mat23.transpose.shape
+  say "mat23.transpose.data"  mat23.transpose.data
+
+  IO.println "\n=== Matmul ==="
+  say "A2 @ I2" (Tensor.matmul A2 I2).data
+
+  IO.println "\n=== Edge cases ==="
+  say "bad reshape (3×4 → 2×2)" (zeros34.reshape [2, 2])
+  say "bad matmul shape (expect [2,3])" badMul.shape

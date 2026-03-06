@@ -153,7 +153,6 @@ open TorchLib TorchLib.Verification
   let out := IBP.linear l it
   assert! out.shape = [1, 1]
   let i := out.data.get! 0
-  IO.println s!"  IBP.linear out: [{i.lo}, {i.hi}]"
   assert! (i.lo - 0.8).abs < 1e-6
   assert! (i.hi - 1.2).abs < 1e-6
   IO.println "✓ IBP.linear soundness spot-check: [1,-1]·[1,0]±0.1 = 1.0±0.2"

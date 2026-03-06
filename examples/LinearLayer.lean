@@ -11,6 +11,7 @@ from `TorchLib.Layers`.
 
 open TorchLib
 
+/-- Print a labelled value to stdout using its `Repr` instance. -/
 private def say [Repr α] (label : String) (v : α) : IO Unit :=
   IO.println s!"{label}: {reprStr v}"
 
@@ -65,3 +66,23 @@ def fc2 : Linear Float :=
 def input2 : Tensor Float := { shape := [1, 2], data := #[3.0, 4.0] }
 
 #eval say "fc2 [[3,4]]" (Linear.forward fc2 input2).data
+
+-- ---------------------------------------------------------------------------
+-- Main
+-- ---------------------------------------------------------------------------
+
+def main : IO Unit := do
+  IO.println "=== Initialization ==="
+  say "fc.weight.shape" fc.weight.shape
+  say "fc.bias.shape"   fc.bias.shape
+
+  IO.println "\n=== Forward pass ==="
+  say "out1.shape" out1.shape
+  say "out1.data"  out1.data
+
+  IO.println "\n=== Batch forward pass ==="
+  say "out3.shape" out3.shape
+  say "out3.data"  out3.data
+
+  IO.println "\n=== Custom weights ==="
+  say "fc2 [[3,4]]" (Linear.forward fc2 input2).data

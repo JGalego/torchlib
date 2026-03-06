@@ -13,6 +13,7 @@ Demonstrates loss functions and optimizers (SGD, Adam) from
 
 open TorchLib TorchLib.Runtime
 
+/-- Print a labelled value to stdout using its `Repr` instance. -/
 private def say [Repr α] (label : String) (v : α) : IO Unit :=
   IO.println s!"{label}: {reprStr v}"
 
@@ -108,7 +109,11 @@ def adamParams2 := adamStep2.2
 -- We compute these directly and feed them into SGD.step.
 
 /-- One SGD step on a `Linear Float` layer.
-    Returns the updated layer and the scalar loss before the update. -/
+    Returns the updated state, the updated layer, and the scalar loss before
+    the update.
+
+    See also `trainStep` in `examples/Verification.lean` which uses the same
+    technique for training a linear classifier before IBP certification. -/
 def linearSGDStep (cfg : SGDConfig) (st : SGDState)
     (l : Linear Float) (xs ys : Tensor Float)
     : SGDState × Linear Float × Float :=
@@ -122,8 +127,8 @@ def linearSGDStep (cfg : SGDConfig) (st : SGDState)
   let gradB   := diff.sumLastAxis |>.map (· * (2.0 / batch))
   let paramsGrads := [("w", l.weight, gradW), ("b", l.bias, gradB)]
   let (st', ps) := SGD.step cfg st paramsGrads
-  let w' := ps.find? (·.1 = "w") |>.map (·.2) |>.getD l.weight
-  let b' := ps.find? (·.1 = "b") |>.map (·.2) |>.getD l.bias
+  let w' := ps.find? (fun p => p.1 == "w") |>.map (·.2) |>.getD l.weight
+  let b' := ps.find? (fun p => p.1 == "b") |>.map (·.2) |>.getD l.bias
   (st', { weight := w', bias := b' }, loss)
 
 /-- Train a single `Linear Float` layer for `n` steps and print the loss. -/
@@ -141,3 +146,24 @@ def trainLoop (n : Nat) : IO Unit := do
     IO.println s!"step {i}: loss = {loss}"
 
 #eval trainLoop 8
+
+-- ---------------------------------------------------------------------------
+-- Main
+-- ---------------------------------------------------------------------------
+
+def main : IO Unit := do
+  IO.println "=== Loss functions ==="
+  say "mseLoss"          (mseLoss pred4 target4)
+  say "crossEntropyLoss" (crossEntropyLoss logits23 #[2, 0])
+  say "binaryCELoss"     (binaryCELoss probs btgt)
+
+  IO.println "\n=== SGD ==="
+  say "SGD (no momentum)"  (newParams1.map (fun (n, p) => (n, p.data)))
+  say "SGD (momentum=0.9)" (newParams2.map (fun (_, p) => p.data))
+
+  IO.println "\n=== Adam ==="
+  say "Adam step 1" (adamParams1.map (fun (n, p) => (n, p.data)))
+  say "Adam step 2" (adamParams2.map (fun (_, p) => p.data))
+
+  IO.println "\n=== Training loop ==="
+  trainLoop 8

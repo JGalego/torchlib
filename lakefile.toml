@@ -21,3 +21,8 @@ globs = ["TorchLibTests.+"]
 name = "runTests"
 srcDir = "scripts"
 root = "RunTests"
+
+[[lean_exe]]
+name = "runExamples"
+srcDir = "scripts"
+root = "RunExamples"
