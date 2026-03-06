@@ -104,6 +104,7 @@ lake env lean examples/MLP.lean
 lake env lean examples/Autograd.lean
 lake env lean examples/Training.lean
 lake env lean examples/Verification.lean
+lake env lean examples/VerificationMNIST.lean
 ```
 
 ## License
