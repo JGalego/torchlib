@@ -99,22 +99,45 @@ def adamParams2 := adamStep2.2
 #eval say "Adam step 2" (adamParams2.map (fun (_, p) => p.data))
 
 -- ---------------------------------------------------------------------------
--- Manual training loop sketch
+-- Training loop: single Linear layer, analytic MSE gradient, SGD update
 -- ---------------------------------------------------------------------------
 
--- A tiny MLP and a 2-step gradient descent loop (no autograd integration,
--- to show the pure-Lean iteration pattern).
+-- For  pred = x @ W^T + b  and  loss = MSE(pred, y):
+--   dL/dW = (2/batch) * (pred - y)^T @ x      shape [out, in]
+--   dL/db = (2/batch) * sum(pred - y, axis=0)  shape [out]
+-- We compute these directly and feed them into SGD.step.
 
-def tinyMLP : MLP Float := MLP.init 4 [8] 1
+/-- One SGD step on a `Linear Float` layer.
+    Returns the updated layer and the scalar loss before the update. -/
+def linearSGDStep (cfg : SGDConfig) (st : SGDState)
+    (l : Linear Float) (xs ys : Tensor Float)
+    : SGDState × Linear Float × Float :=
+  let pred    := Linear.forward l xs
+  let loss    := mseLoss pred ys
+  let diff    := pred - ys                        -- [batch, out]
+  let batch   := (xs.shape.headD 1).toFloat
+  -- dL/dW: transpose diff → [out, batch], matmul with xs → [out, in]
+  let gradW   := Tensor.matmul diff.transpose xs |>.map (· * (2.0 / batch))
+  -- dL/db: column-wise mean of diff
+  let gradB   := diff.sumLastAxis |>.map (· * (2.0 / batch))
+  let paramsGrads := [("w", l.weight, gradW), ("b", l.bias, gradB)]
+  let (st', ps) := SGD.step cfg st paramsGrads
+  let w' := ps.find? (·.1 = "w") |>.map (·.2) |>.getD l.weight
+  let b' := ps.find? (·.1 = "b") |>.map (·.2) |>.getD l.bias
+  (st', { weight := w', bias := b' }, loss)
 
-/-- Run `n` pseudo-training steps, printing the MSE loss each time.
-    (Gradients are not computed here; this illustrates the loop structure.) -/
+/-- Train a single `Linear Float` layer for `n` steps and print the loss. -/
 def trainLoop (n : Nat) : IO Unit := do
-  let xs : Tensor Float := Tensor.ones  [16, 4]
-  let ys : Tensor Float := Tensor.zeros [16, 1]
+  -- 16 samples, 4 features, predict a scalar target of 0.0
+  let xs  : Tensor Float := Tensor.ones  [16, 4]
+  let ys  : Tensor Float := Tensor.zeros [16, 1]
+  let cfg : SGDConfig    := { lr := 0.05 }
+  let mut l  := Linear.init 4 1
+  let mut st := SGD.initState cfg ["w", "b"]
   for i in [:n] do
-    let pred := MLP.forward tinyMLP xs
-    let loss := mseLoss pred ys
+    let (st', l', loss) := linearSGDStep cfg st l xs ys
+    st := st'
+    l  := l'
     IO.println s!"step {i}: loss = {loss}"
 
-#eval trainLoop 3
+#eval trainLoop 8

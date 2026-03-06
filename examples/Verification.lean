@@ -1,123 +1,135 @@
 import TorchLib.Core
 import TorchLib.Layers
 import TorchLib.Models
+import TorchLib.Runtime.Training
 import TorchLib.Verification.IBP
 
 /-!
 # Example: Formal Verification with IBP
 
-Demonstrates Interval Bound Propagation (IBP) from
-`TorchLib.Verification.IBP`.
+**Problem:** given a trained network and an input perturbation radius ε,
+can we guarantee the predicted class never changes for *any* input within
+the ℓ∞ ball of radius ε around a test point?
 
-Given an `MLP` and an ℓ∞ perturbation radius ε, IBP computes provably
-sound lower and upper bounds on the network outputs for all inputs within
-the ball.  These bounds can be used to certify adversarial robustness.
+**Method:** Interval Bound Propagation (IBP) propagates a *pair* of
+tensors `(lo, hi)` — the lower and upper bounds on every activation —
+through each layer using sound interval arithmetic.  The final `(lo, hi)`
+pair provably brackets all possible output logits under that perturbation.
+
+**Certification condition** (binary classifier, class 0 vs 1):
+
+    lo[0] > hi[1]
+
+i.e. the worst-case logit for class 0 still beats the best-case logit
+for class 1.  If this holds the predicted class cannot flip.
+
+## Why default-initialized weights fail
+
+`MLP.init` sets every weight to 0.1 and every bias to 0.  A uniform-input
+uniform-weight network produces identical logits for every class → no
+decision margin → IBP can never certify anything.  We must train first.
 -/
 
-open TorchLib TorchLib.Verification
-
-private def say [Repr α] (label : String) (v : α) : IO Unit :=
-  IO.println s!"{label}: {reprStr v}"
+open TorchLib TorchLib.Runtime TorchLib.Verification
 
 -- ---------------------------------------------------------------------------
--- Network under analysis
+-- Dataset:  class 0 = [+1,+1,+1,+1],  class 1 = [−1,−1,−1,−1]
 -- ---------------------------------------------------------------------------
 
--- Small 4-input, 2-class classifier: 4 → 8 → 8 → 2
-def net : MLP Float := MLP.init 4 [8, 8] 2
+def trainXs : Tensor Float :=
+  { shape := [16, 4]
+    data  := Array.replicate 32 1.0 ++ Array.replicate 32 (-1.0) }
+
+def trainYs : Tensor Float :=
+  -- 8 rows [1, 0] then 8 rows [0, 1]
+  let r0 := (Array.replicate 8 #[1.0, 0.0]).foldl (· ++ ·) #[]
+  let r1 := (Array.replicate 8 #[0.0, 1.0]).foldl (· ++ ·) #[]
+  { shape := [16, 2], data := r0 ++ r1 }
+
+-- Nominal test point: a class-0 sample
+def x0 : Tensor Float := Tensor.full [1, 4] 1.0
 
 -- ---------------------------------------------------------------------------
--- Concrete forward pass at the nominal point
+-- Training: Linear(4 → 2), analytic MSE gradients, SGD
 -- ---------------------------------------------------------------------------
+-- For  pred = xs @ W^T + b  and  loss = MSE(pred, ys):
+--   dL/dW = (2/batch) * (pred − ys)^T @ xs    shape [out, in]
+--   dL/db = (2/batch) * (pred − ys)^T @ 1s    shape [out]
 
-def x0 : Tensor Float := Tensor.full [1, 4] 0.5
+def trainStep (cfg : SGDConfig) (st : SGDState) (l : Linear Float)
+    (xs ys : Tensor Float) : SGDState × Linear Float × Float :=
+  let batch  := (xs.shape.headD 1).toFloat
+  let batchN := xs.shape.headD 1
+  let pred   := Linear.forward l xs
+  let loss   := mseLoss pred ys
+  let diff   := pred - ys                              -- [batch, out]
+  let gradW  := Tensor.matmul diff.transpose xs        -- [out, in]
+                  |>.map (· * (2.0 / batch))
+  -- sum diff over batch: diff^T @ ones_col → [out, 1] → flatten → [out]
+  let ones   : Tensor Float := Tensor.ones [batchN, 1]
+  let gradB  := Tensor.matmul diff.transpose ones
+                  |>.flatten |>.map (· * (2.0 / batch))
+  let r  := SGD.step cfg st [("w", l.weight, gradW), ("b", l.bias, gradB)]
+  let st' := r.1
+  let ps  := r.2
+  let w'  := ps.find? (fun p => p.1 == "w") |>.map (·.2) |>.getD l.weight
+  let b'  := ps.find? (fun p => p.1 == "b") |>.map (·.2) |>.getD l.bias
+  (st', ({ weight := w', bias := b' } : Linear Float), loss)
 
-def nominalOutput : Tensor Float := MLP.forward net x0
-
-#eval say "nominal output shape" nominalOutput.shape
-#eval say "nominal output data"  nominalOutput.data
-
--- ---------------------------------------------------------------------------
--- IBP: propagate interval bounds with ε = 0.1
--- ---------------------------------------------------------------------------
-
-def eps : Float := 0.1
-
--- Build the interval tensor  [x0 - ε, x0 + ε]  element-wise
-def inputBounds : ITensor := ITensor.fromCenterRadius x0 eps
-
-#eval say "input bounds shape" inputBounds.shape
-#eval say "input bounds lo"   (inputBounds.map (·.lo)).data
-#eval say "input bounds hi"   (inputBounds.map (·.hi)).data
-
--- Propagate through the MLP
-def outputBounds : ITensor := IBP.mlp net inputBounds
-
-def loBounds : Tensor Float := outputBounds.map (·.lo)
-def hiBounds : Tensor Float := outputBounds.map (·.hi)
-
-#eval say "output lo bounds" loBounds.data
-#eval say "output hi bounds" hiBounds.data
-
--- ---------------------------------------------------------------------------
--- Certified robustness check
--- ---------------------------------------------------------------------------
-
--- The nominal output is within the certified bounds
-#eval say "nominal in bounds?" (ITensor.contains outputBounds nominalOutput)
-
--- Convenience wrapper: center + ε → (lo, hi) tensors
-def mlpBoundsResult := IBP.mlpBounds net x0 eps
-def lo := mlpBoundsResult.1
-def hi := mlpBoundsResult.2
-
-#eval say "mlpBounds lo" lo.data
-#eval say "mlpBounds hi" hi.data
+def trainLinear (n : Nat) (lr : Float := 0.05) : IO (Linear Float) := do
+  let cfg : SGDConfig := { lr }
+  let mut l  := Linear.init 4 2
+  let mut st := SGD.initState cfg ["w", "b"]
+  for i in [:n] do
+    let (st', l', loss) := trainStep cfg st l trainXs trainYs
+    st := st'
+    l  := l'
+    if i % 10 == 0 then
+      IO.println s!"  step {i}: loss = {loss}"
+  return l
 
 -- ---------------------------------------------------------------------------
--- Margin and robustness certificate
+-- IBP certification
 -- ---------------------------------------------------------------------------
 
--- For binary classification (2 classes), the network is certifiably robust
--- for class 0 if the lower bound of logit 0 exceeds the upper bound of logit 1.
---
---   robust := lo[0] > hi[1]
---
--- (A negative margin means robustness cannot be certified with IBP at this ε.)
-
-def certifyClass0 (lo hi : Tensor Float) : String :=
-  let lo0 := lo.data.getD 0 0.0
-  let hi1 := hi.data.getD 1 0.0
-  if lo0 > hi1 then
-    s!"CERTIFIED robust for class 0  (margin = {lo0 - hi1})"
-  else
-    s!"NOT certified  (gap = {lo0 - hi1}, try smaller ε)"
-
-#eval say "certificate" (certifyClass0 lo hi)
+def certify (l : Linear Float) (x : Tensor Float) (eps : Float)
+    : Tensor Float × Tensor Float :=
+  let bounds := ITensor.fromCenterRadius x eps
+  let out    := IBP.linear l bounds
+  (out.map (·.lo), out.map (·.hi))
 
 -- ---------------------------------------------------------------------------
--- Sweep over radii to find the largest certifiable ε
+-- Main
 -- ---------------------------------------------------------------------------
 
-def certificationSweep : IO Unit := do
-  let radii : List Float := [0.01, 0.05, 0.1, 0.2, 0.5]
-  for ε in radii do
-    let (lo, hi) := IBP.mlpBounds net x0 ε
-    let lo0 := lo.data.getD 0 0.0
-    let hi1 := hi.data.getD 1 0.0
-    let certified := if lo0 > hi1 then "yes" else "no"
-    IO.println s!"ε = {ε}: certified = {certified}"
+def main : IO Unit := do
+  -- Train
+  IO.println "=== Training Linear(4→2) ==="
+  let trained ← trainLinear 50
 
-#eval certificationSweep
+  -- Show what the network learned
+  IO.println ""
+  IO.println s!"W row 0 (should be ≈ +0.125): {reprStr (trained.weight.data.extract 0 4)}"
+  IO.println s!"W row 1 (should be ≈ −0.125): {reprStr (trained.weight.data.extract 4 8)}"
+  IO.println s!"bias:                         {reprStr trained.bias.data}"
 
--- ---------------------------------------------------------------------------
--- IBP soundness axiom (from the library)
--- ---------------------------------------------------------------------------
+  -- Nominal forward pass
+  let nomOut := Linear.forward trained x0
+  IO.println ""
+  IO.println "=== Nominal pass at x0 = [1,1,1,1] ==="
+  IO.println s!"logits:       {reprStr nomOut.data}"
+  let c0wins := if nomOut.data.getD 0 0.0 > nomOut.data.getD 1 0.0 then "true" else "false"
+  IO.println s!"class 0 wins: {c0wins}"
 
--- The `ibp_linear_sound` axiom asserts that for any `Linear Float` layer `l`:
---
---   ∀ X x, x ∈ X → Linear.forward l x ∈ IBP.linear l X
---
--- This can be brought into scope as:
+  -- IBP sweep
+  IO.println ""
+  IO.println "=== IBP certification sweep ==="
+  for eps in ([0.01, 0.05, 0.1, 0.2, 0.5] : List Float) do
+    let (lo, hi) := certify trained x0 eps
+    let lo0    := lo.data.getD 0 0.0
+    let hi1    := hi.data.getD 1 0.0
+    let margin := lo0 - hi1
+    let status := if lo0 > hi1 then "CERTIFIED ✓" else "not certified"
+    IO.println s!"  ε = {eps}: lo[0] = {lo0}  hi[1] = {hi1}  margin = {margin}  → {status}"
 
-#check @ibp_linear_sound
+#eval main
