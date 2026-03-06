@@ -6,7 +6,7 @@ A [Lean 4](https://lean-lang.org/) library for neural network modeling, training
 
 > 🎖️ **Acknowledgments:** This project is inspired by the design of [PyTorch](https://pytorch.org/) via [TorchLean](https://leandojo.org/torchlean.html) (George *et al.*, 2026) and [CSLib](https://www.cslib.io/). A warm thanks to the PyTorch and Lean communities for their support, and to everyone crazy enough to live at the intersection of formal verification and machine learning!
 
-![TorchLib](TorchLib.png)
+<img src="TorchLib.png" alt="TorchLib Logo" width="50%"/>
 
 ## Overview
 
