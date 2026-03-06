@@ -2,12 +2,17 @@ name = "torchlib"
 version = "0.1.0"
 defaultTargets = ["TorchLib"]
 testDriver = "runTests"
+lintDriver = "batteries/runLinter"
 
-[leanOptions]
-weak.linter.flexible = true
-weak.linter.pythonStyle = false
-weak.linter.checkInitImports = false
-weak.linter.allScriptsDocumented = false
+[[require]]
+name = "batteries"
+scope = "leanprover-community"
+rev = "main"
+
+[[require]]
+name = "lintLlmProofs"
+git = "https://github.com/jessealama/lint-llm-proofs"
+rev = "main"
 
 [[lean_lib]]
 name = "TorchLib"

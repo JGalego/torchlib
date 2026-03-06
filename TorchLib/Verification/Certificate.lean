@@ -84,16 +84,27 @@ inductive CertResult
     - `metadata` : provenance / tool info
 -/
 structure Certificate where
-  query     : String            -- string serialisation of query
-  method    : String            -- e.g. "IBP", "CROWN"
+  /-- String serialisation of the certified property. -/
+  query     : String
+  /-- Verification method used (e.g. `"IBP"`, `"CROWN"`). -/
+  method    : String
+  /-- Certified lower output bounds. -/
   boundsLo  : Tensor Float
+  /-- Certified upper output bounds. -/
   boundsHi  : Tensor Float
+  /-- Whether the certificate was verified valid. -/
   valid     : Bool := true
+  /-- Provenance and tool information. -/
   metadata  : List (String × String) := []
-  deriving Repr
+
+instance : Repr Certificate where
+  reprPrec c prec := Repr.addAppParen
+    f!"Certificate \{ query := {reprPrec c.query 0}, method := {reprPrec c.method 0}, valid := {reprPrec c.valid 0} }"
+    prec
 
 namespace Certificate
 
+/-- Serialise the certificate to a human-readable string. -/
 def serialise (c : Certificate) : String :=
   "method: " ++ c.method ++ "\n" ++
   "valid: " ++ toString c.valid ++ "\n" ++
@@ -101,7 +112,7 @@ def serialise (c : Certificate) : String :=
   "hi: " ++ toString c.boundsHi.data ++ "\n"
 
 /-- Check a certificate against fresh bounds (independent re-verification). -/
-def verify [Inhabited Float] (c : Certificate) (freshLo freshHi : Tensor Float) : Bool :=
+def verify (c : Certificate) (freshLo freshHi : Tensor Float) : Bool :=
   -- Check that fresh bounds are tighter than certified bounds
   let loOk := (freshLo.data.zip c.boundsLo.data).all (fun (fl, cl) => fl >= cl)
   let hiOk := (freshHi.data.zip c.boundsHi.data).all (fun (fh, ch) => fh <= ch)
@@ -113,7 +124,9 @@ end Certificate
 -- Checker typeclass
 -- ---------------------------------------------------------------------------
 
+/-- A `Checker` is an engine that can evaluate a `CertQuery` and produce a `CertResult`. -/
 class Checker (C : Type) where
+  /-- Run a certification query and produce a result. -/
   check : C → CertQuery → CertResult
 
 -- ---------------------------------------------------------------------------
@@ -122,11 +135,17 @@ class Checker (C : Type) where
 
 /-- Certifies using Interval Bound Propagation. -/
 structure IBPChecker where
+  /-- The MLP model to certify. -/
   model : MLP Float
-  deriving Repr
+
+instance : Repr IBPChecker where
+  reprPrec ch prec := Repr.addAppParen
+    f!"IBPChecker \{ model := {reprPrec ch.model 0} }"
+    prec
 
 namespace IBPChecker
 
+/-- Check local ℓ∞-robustness using IBP bounds. -/
 def checkLocalRobustness (ch : IBPChecker) (center : Tensor Float)
     (eps : Float) (classIdx : Nat) : CertResult :=
   let (lo, hi) := IBP.mlpBounds ch.model center eps
@@ -140,6 +159,7 @@ def checkLocalRobustness (ch : IBPChecker) (center : Tensor Float)
   else
     CertResult.unknown "IBP bounds not tight enough to certify"
 
+/-- Check whether the MLP's output stays within bounds for a given input region. -/
 def checkOutputRange (ch : IBPChecker) (inputLo inputHi outLo outHi : Tensor Float)
     : CertResult :=
   let center := inputLo.zipWith (fun l h => (l + h) / 2.0) inputHi
@@ -176,12 +196,19 @@ instance : Checker IBPChecker where
 
 /-- Certifies using CROWN back-substitution. -/
 structure CROWNChecker where
+  /-- The MLP model to certify. -/
   model : MLP Float
+  /-- Bound computation method (IBP, CROWN, hybrid, etc.). -/
   method : BoundMethod := .crown
-  deriving Repr
+
+instance : Repr CROWNChecker where
+  reprPrec ch prec := Repr.addAppParen
+    f!"CROWNChecker \{ model := {reprPrec ch.model 0}, method := {reprPrec ch.method 0} }"
+    prec
 
 namespace CROWNChecker
 
+/-- Check local ℓ∞-robustness using CROWN bounds. -/
 def checkLocalRobustness [Inhabited Float] (ch : CROWNChecker) (center : Tensor Float)
     (eps : Float) (classIdx : Nat) : CertResult :=
   let (lo, hi) := computeBounds ch.method ch.model center eps

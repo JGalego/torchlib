@@ -76,8 +76,11 @@ def binaryCELoss (probs targets : Tensor Float) : Float :=
     - `State` — mutable optimiser state (moment buffers, step counter, etc.)
     - `step`  — update parameters given gradients -/
 class Optimizer (O : Type) where
+  /-- Mutable state type for this optimiser. -/
   State : Type
+  /-- Create initial state from config and parameter names. -/
   initState  : O → List String → State
+  /-- One optimisation step: update parameters given gradients. -/
   step       : O → State
              → List (String × Tensor Float × Tensor Float)
              → State × List (String × Tensor Float)
@@ -86,20 +89,37 @@ class Optimizer (O : Type) where
 -- SGD with momentum
 -- ---------------------------------------------------------------------------
 
+/-- Configuration for Stochastic Gradient Descent with momentum. -/
 structure SGDConfig where
+  /-- Learning rate. -/
   lr          : Float := 0.01
+  /-- Momentum factor. -/
   momentum    : Float := 0.0
+  /-- L2 weight decay coefficient. -/
   weightDecay : Float := 0.0
+  /-- Whether to use Nesterov momentum. -/
   nesterov    : Bool  := false
-  deriving Repr
 
+instance : Repr SGDConfig where
+  reprPrec c prec := Repr.addAppParen
+    f!"SGDConfig \{ lr := {reprPrec c.lr 0}, momentum := {reprPrec c.momentum 0}, weightDecay := {reprPrec c.weightDecay 0}, nesterov := {reprPrec c.nesterov 0} }"
+    prec
+
+/-- Mutable state for SGD (velocity buffers). -/
 structure SGDState where
+  /-- Per-parameter velocity tensors. -/
   velocities : List (String × Tensor Float)
-  deriving Repr
+
+instance : Repr SGDState where
+  reprPrec c prec := Repr.addAppParen
+    f!"SGDState \{ velocities := {reprPrec c.velocities 0} }"
+    prec
 
 namespace SGD
 
-def initState (_cfg : SGDConfig) (_names : List String) : SGDState :=
+/-- Create a fresh SGD state (empty velocity buffers). -/
+def initState (cfg : SGDConfig) (names : List String) : SGDState :=
+  let _ := cfg; let _ := names
   { velocities := [] }
 
 /-- One SGD (with optional momentum and weight-decay) step. -/
@@ -130,25 +150,47 @@ end SGD
 -- Adam
 -- ---------------------------------------------------------------------------
 
+/-- Configuration for the Adam optimiser. -/
 structure AdamConfig where
+  /-- Learning rate. -/
   lr      : Float := 0.001
+  /-- Exponential decay rate for the first moment. -/
   beta1   : Float := 0.9
+  /-- Exponential decay rate for the second moment. -/
   beta2   : Float := 0.999
+  /-- Small constant for numerical stability. -/
   eps     : Float := 1e-8
+  /-- L2 weight decay coefficient. -/
   weightDecay : Float := 0.0
+  /-- Whether to use AMSGrad variant. -/
   amsgrad : Bool  := false
-  deriving Repr
 
+instance : Repr AdamConfig where
+  reprPrec c prec := Repr.addAppParen
+    f!"AdamConfig \{ lr := {reprPrec c.lr 0}, beta1 := {reprPrec c.beta1 0}, beta2 := {reprPrec c.beta2 0}, eps := {reprPrec c.eps 0}, weightDecay := {reprPrec c.weightDecay 0}, amsgrad := {reprPrec c.amsgrad 0} }"
+    prec
+
+/-- Mutable state for Adam (moment buffers and step counter). -/
 structure AdamState where
+  /-- Current optimisation step count. -/
   step : Nat
-  m1   : List (String × Tensor Float)   -- first  moment
-  m2   : List (String × Tensor Float)   -- second moment
-  vMax : List (String × Tensor Float)   -- for AMSGrad
-  deriving Repr
+  /-- First moment (mean) estimates per parameter. -/
+  m1   : List (String × Tensor Float)
+  /-- Second moment (variance) estimates per parameter. -/
+  m2   : List (String × Tensor Float)
+  /-- Maximum second moment (for AMSGrad). -/
+  vMax : List (String × Tensor Float)
+
+instance : Repr AdamState where
+  reprPrec c prec := Repr.addAppParen
+    f!"AdamState \{ step := {reprPrec c.step 0}, m1 := {reprPrec c.m1 0}, m2 := {reprPrec c.m2 0}, vMax := {reprPrec c.vMax 0} }"
+    prec
 
 namespace Adam
 
-def initState (_cfg : AdamConfig) (_names : List String) : AdamState :=
+/-- Create a fresh Adam state. -/
+def initState (cfg : AdamConfig) (names : List String) : AdamState :=
+  let _ := cfg; let _ := names
   { step := 0
     m1   := []
     m2   := []
@@ -223,27 +265,48 @@ end AdamW
 -- RMSProp
 -- ---------------------------------------------------------------------------
 
+/-- Configuration for RMSProp optimiser. -/
 structure RMSPropConfig where
+  /-- Learning rate. -/
   lr      : Float := 0.01
+  /-- Smoothing constant (decay of running average). -/
   alpha   : Float := 0.99
+  /-- Small constant for numerical stability. -/
   eps     : Float := 1e-8
+  /-- Momentum factor. -/
   momentum : Float := 0.0
+  /-- Whether to compute centred RMSProp. -/
   centered : Bool := false
-  deriving Repr
 
+instance : Repr RMSPropConfig where
+  reprPrec c prec := Repr.addAppParen
+    f!"RMSPropConfig \{ lr := {reprPrec c.lr 0}, alpha := {reprPrec c.alpha 0}, eps := {reprPrec c.eps 0}, momentum := {reprPrec c.momentum 0}, centered := {reprPrec c.centered 0} }"
+    prec
+
+/-- Mutable state for RMSProp. -/
 structure RMSPropState where
+  /-- Running average of squared gradients. -/
   squareAvg : List (String × Tensor Float)
-  gradAvg   : List (String × Tensor Float)   -- for centered
-  buf       : List (String × Tensor Float)   -- momentum buffer
-  deriving Repr
+  /-- Running average of gradients (for centred variant). -/
+  gradAvg   : List (String × Tensor Float)
+  /-- Momentum buffer. -/
+  buf       : List (String × Tensor Float)
+
+instance : Repr RMSPropState where
+  reprPrec c prec := Repr.addAppParen
+    f!"RMSPropState \{ squareAvg := {reprPrec c.squareAvg 0}, gradAvg := {reprPrec c.gradAvg 0}, buf := {reprPrec c.buf 0} }"
+    prec
 
 namespace RMSProp
 
-def initState (_cfg : RMSPropConfig) (_names : List String) : RMSPropState :=
+/-- Create a fresh RMSProp state. -/
+def initState (cfg : RMSPropConfig) (names : List String) : RMSPropState :=
+  let _ := cfg; let _ := names
   { squareAvg := []
     gradAvg   := []
     buf       := [] }
 
+/-- One RMSProp optimisation step. -/
 def step (cfg : RMSPropConfig) (s : RMSPropState)
     (paramsGrads : List (String × Tensor Float × Tensor Float))
     : RMSPropState × List (String × Tensor Float) :=

@@ -39,10 +39,17 @@ abbrev VarId := Nat
 /-- A `Variable` wraps a `Tensor Float` with optional gradient storage.
     `requiresGrad` controls whether gradients are accumulated for this node. -/
 structure Variable where
+  /-- Unique identifier for this variable in the current forward pass. -/
   id           : VarId
+  /-- The tensor value held by this variable. -/
   data         : Tensor Float
+  /-- Whether gradients should be accumulated for this variable. -/
   requiresGrad : Bool := true
-  deriving Repr
+
+instance : Repr Variable where
+  reprPrec v prec := Repr.addAppParen
+    f!"Variable \{ id := {reprPrec v.id 0}, data := {reprPrec v.data 0}, requiresGrad := {reprPrec v.requiresGrad 0} }"
+    prec
 
 -- ---------------------------------------------------------------------------
 -- Tape (Wengert list)
@@ -54,18 +61,24 @@ abbrev GradFn := List (Tensor Float) → List (Tensor Float)
 
 /-- One entry on the tape. -/
 structure TapeEntry where
+  /-- Variable ids of this entry's outputs. -/
   outputIds : List VarId
+  /-- Variable ids of this entry's inputs. -/
   inputIds  : List VarId
+  /-- Backward function mapping output gradients to input gradients. -/
   gradFn    : GradFn
 
 /-- The `Tape` is a mutable list of tape entries plus a gradient accumulator
     (one `Tensor Float` per `VarId`, initialised to zero on first use). -/
 structure Tape where
+  /-- Recorded forward-pass operations in chronological order. -/
   entries  : Array TapeEntry
+  /-- Sparse gradient accumulator keyed by `VarId`. -/
   grads    : Array (VarId × Tensor Float)  -- sparse accumulator
 
 namespace Tape
 
+/-- Create an empty tape with no entries and no gradients. -/
 def empty : Tape := { entries := #[], grads := #[] }
 
 /-- Append an entry to the tape (called during the forward pass). -/
@@ -164,7 +177,9 @@ def vjp (op : IR.OpCode) (inputs : List (Tensor Float))
 /-- The `AutogradEngine` manages a global `Tape` and `VarId` counter during a
     forward pass.  It is threaded through computations using `IO.Ref`. -/
 structure AutogradEngine where
+  /-- Reference to the forward-pass tape. -/
   tape      : IO.Ref Tape
+  /-- Counter for allocating fresh variable ids. -/
   nextVarId : IO.Ref Nat
 
 namespace AutogradEngine

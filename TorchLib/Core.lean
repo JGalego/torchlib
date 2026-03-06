@@ -119,11 +119,17 @@ instance : Scalar Rat where
     The flat `data` array stores elements in row-major (C-contiguous) order.
     `shape` is carried at runtime for dynamic shape checks. -/
 structure Tensor (α : Type) where
+  /-- Tensor dimensions (e.g. `[2, 3]` for a 2×3 matrix). -/
   shape  : Shape
+  /-- Flat row-major storage of tensor elements. -/
   data   : Array α
-  deriving Repr
 
-instance [Inhabited α] : Inhabited (Tensor α) where
+instance [Repr α] : Repr (Tensor α) where
+  reprPrec t prec := Repr.addAppParen
+    f!"Tensor \{ shape := {reprPrec t.shape 0}, data := {reprPrec t.data 0} }"
+    prec
+
+instance : Inhabited (Tensor α) where
   default := { shape := [], data := #[] }
 
 namespace Tensor
@@ -323,17 +329,25 @@ end Tensor
 
 /-- A named collection of tensors (analogous to `state_dict` in PyTorch). -/
 structure StateDict (α : Type) where
+  /-- Named parameter list: `(name, tensor)` pairs. -/
   params : List (String × Tensor α)
-  deriving Repr
+
+instance [Repr α] : Repr (StateDict α) where
+  reprPrec sd prec := Repr.addAppParen
+    f!"StateDict \{ params := {reprPrec sd.params 0} }"
+    prec
 
 namespace StateDict
 
+/-- Empty state dictionary with no parameters. -/
 def empty : StateDict α := { params := [] }
 
+/-- Insert or replace a named tensor in the dictionary. -/
 def insert (sd : StateDict α) (k : String) (v : Tensor α) : StateDict α :=
   { params := (k, v) :: sd.params.filter (·.1 ≠ k) }
 
-def lookup [Inhabited α] (sd : StateDict α) (k : String) : Option (Tensor α) :=
+/-- Look up a tensor by name, returning `none` if absent. -/
+def lookup (sd : StateDict α) (k : String) : Option (Tensor α) :=
   sd.params.find? (·.1 = k) |>.map (·.2)
 
 end StateDict

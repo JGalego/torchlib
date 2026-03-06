@@ -22,3 +22,8 @@ jobs:
         with:
           auto-config: false
           test: true
+      - name: Lint 🧹
+        uses: leanprover/lean-action@v1.4.0
+        with:
+          auto-config: false
+          lint: true

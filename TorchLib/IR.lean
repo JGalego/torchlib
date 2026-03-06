@@ -17,6 +17,7 @@ namespace TorchLib.IR
 -- Tensor dtype
 -- ---------------------------------------------------------------------------
 
+/-- Supported tensor element types (matching PyTorch `dtype`). -/
 inductive DType
   | float32
   | float64
@@ -108,10 +109,17 @@ abbrev ValueId := Nat
 
 /-- A `Value` carries type information about an SSA-defined tensor. -/
 structure Value where
+  /-- Unique SSA identifier for this value. -/
   id      : ValueId
+  /-- Tensor shape. -/
   shape   : Shape
+  /-- Element data type. -/
   dtype   : DType
-  deriving Repr
+
+instance : Repr Value where
+  reprPrec v prec := Repr.addAppParen
+    f!"Value \{ id := {reprPrec v.id 0}, shape := {reprPrec v.shape 0}, dtype := {reprPrec v.dtype 0} }"
+    prec
 
 -- ---------------------------------------------------------------------------
 -- Graph nodes
@@ -122,12 +130,21 @@ structure Value where
     - `outputs` are `Value`s produced by this node.
     - `attrs` is an opaque bag of string attributes (for ops with parameters). -/
 structure Node where
+  /-- Unique node identifier within the graph. -/
   id      : Nat
+  /-- The primitive operation this node computes. -/
   op      : OpCode
+  /-- `ValueId`s of predecessor nodes (operands). -/
   inputs  : List ValueId
+  /-- Values produced by this node. -/
   outputs : List Value
+  /-- Opaque string key-value attributes (e.g. embedded constants). -/
   attrs   : List (String × String)   -- key-value string attributes
-  deriving Repr
+
+instance : Repr Node where
+  reprPrec n prec := Repr.addAppParen
+    f!"Node \{ id := {reprPrec n.id 0}, op := {reprPrec n.op 0}, inputs := {reprPrec n.inputs 0}, outputs := {reprPrec n.outputs 0}, attrs := {reprPrec n.attrs 0} }"
+    prec
 
 -- ---------------------------------------------------------------------------
 -- Graph
@@ -136,14 +153,23 @@ structure Node where
 /-- A `Graph` is a topologically-ordered list of `Node`s.
     `inputs` are the graph's free variables; `outputs` are the return values. -/
 structure Graph where
+  /-- Human-readable name for this computation graph. -/
   name    : String
+  /-- Topologically-ordered list of computation nodes. -/
   nodes   : List Node
+  /-- Free variables / parameter placeholders. -/
   inputs  : List Value    -- placeholder/parameter values
+  /-- Value ids of the graph’s return values. -/
   outputs : List ValueId  -- final result value ids
-  deriving Repr
+
+instance : Repr Graph where
+  reprPrec g prec := Repr.addAppParen
+    f!"Graph \{ name := {reprPrec g.name 0}, nodes := {reprPrec g.nodes 0}, inputs := {reprPrec g.inputs 0}, outputs := {reprPrec g.outputs 0} }"
+    prec
 
 namespace Graph
 
+/-- Construct an empty graph with the given name. -/
 def empty (name : String) : Graph :=
   { name, nodes := [], inputs := [], outputs := [] }
 
@@ -182,12 +208,19 @@ end Graph
 /-- `Builder` provides an imperative interface for constructing a `Graph`,
     maintaining a counter for fresh `ValueId`s. -/
 structure Builder where
+  /-- The graph being constructed. -/
   graph      : Graph
+  /-- Counter for allocating fresh `ValueId`s. -/
   nextId     : Nat
-  deriving Repr
+
+instance : Repr Builder where
+  reprPrec b prec := Repr.addAppParen
+    f!"Builder \{ graph := {reprPrec b.graph 0}, nextId := {reprPrec b.nextId 0} }"
+    prec
 
 namespace Builder
 
+/-- Create a fresh builder for a graph with the given name. -/
 def init (name : String) : Builder :=
   { graph := Graph.empty name, nextId := 0 }
 
@@ -232,18 +265,23 @@ end Builder
     This is the "eager" execution mode — for compiled execution, the graph
     would be lowered to native code. -/
 structure InterpEnv where
+  /-- Mapping from `ValueId` to its tensor value. -/
   values : List (ValueId × Tensor Float)
 
 namespace InterpEnv
 
+/-- Empty interpreter environment. -/
 def empty : InterpEnv := { values := [] }
 
+/-- Bind a `ValueId` to a tensor, replacing any existing binding. -/
 def insert (env : InterpEnv) (id : ValueId) (t : Tensor Float) : InterpEnv :=
   { values := (id, t) :: env.values.filter (·.1 ≠ id) }
 
+/-- Look up the tensor bound to a `ValueId`. -/
 def lookup (env : InterpEnv) (id : ValueId) : Option (Tensor Float) :=
   env.values.find? (·.1 = id) |>.map (·.2)
 
+/-- Look up multiple `ValueId`s, dropping any that are missing. -/
 def lookupMany (env : InterpEnv) (ids : List ValueId) : List (Tensor Float) :=
   ids.filterMap (lookup env)
 

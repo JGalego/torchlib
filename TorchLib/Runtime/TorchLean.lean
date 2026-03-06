@@ -51,9 +51,13 @@ inductive ExecutionMode
     - `forward`   — takes params + input, returns output tensor
     - `training`  — flag enabling dropout / batch-norm training behaviour -/
 structure Module where
+  /-- Current weight state dictionary. -/
   params   : StateDict Float
+  /-- Forward function: takes parameters and an input tensor. -/
   forwardFn : StateDict Float → Tensor Float → Tensor Float
+  /-- Whether the module is in training mode. -/
   training : Bool := true
+  /-- Human-readable module name. -/
   name     : String := "module"
 
 namespace Module
@@ -235,10 +239,17 @@ def transformerModule
     yields minibatches.  In a production implementation this would use
     `IO.Channel` or lazy streams. -/
 structure DataLoader where
+  /-- Array of `(input, labels)` pairs forming the dataset. -/
   dataset   : Array (Tensor Float × Array Nat)
+  /-- Number of samples per minibatch. -/
   batchSize : Nat
+  /-- Whether to shuffle data each epoch. -/
   shuffle   : Bool := true
-  deriving Repr
+
+instance : Repr DataLoader where
+  reprPrec dl prec := Repr.addAppParen
+    f!"DataLoader \{ dataset.size := {reprPrec dl.dataset.size 0}, batchSize := {reprPrec dl.batchSize 0}, shuffle := {reprPrec dl.shuffle 0} }"
+    prec
 
 namespace DataLoader
 

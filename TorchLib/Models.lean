@@ -26,10 +26,17 @@ namespace TorchLib
     `hiddenSizes` lists the sizes of all hidden layers; the final linear maps
     to `outputSize`. -/
 structure MLP (α : Type) where
+  /-- Array of fully-connected layers. -/
   layers   : Array (Linear α)
+  /-- Dropout applied between hidden layers. -/
   dropout  : Dropout α
+  /-- Dimension of the final output. -/
   outputSize : Nat
-  deriving Repr
+
+instance [Repr α] : Repr (MLP α) where
+  reprPrec x prec := Repr.addAppParen
+    f!"MLP \{ layers := {reprPrec x.layers 0}, dropout := {reprPrec x.dropout 0}, outputSize := {reprPrec x.outputSize 0} }"
+    prec
 
 namespace MLP
 
@@ -63,9 +70,15 @@ end MLP
     Architecture:
       `[Conv2d → BatchNorm2d → ReLU → MaxPool2d]*` followed by `Flatten → MLP` -/
 structure CNN (α : Type) where
+  /-- Pairs of `(Conv2d, BatchNorm2d)` blocks. -/
   convBlocks : Array (Conv2d α × BatchNorm2d α)
+  /-- Classification/MLP head applied after flattening. -/
   head       : MLP α
-  deriving Repr
+
+instance [Repr α] : Repr (CNN α) where
+  reprPrec x prec := Repr.addAppParen
+    f!"CNN \{ convBlocks := {reprPrec x.convBlocks 0}, head := {reprPrec x.head 0} }"
+    prec
 
 namespace CNN
 
@@ -102,16 +115,27 @@ end CNN
 
     Architecture: `LN → MHA → residual → LN → FFN → residual` -/
 structure TransformerBlock (α : Type) where
+  /-- Multi-head self-attention sub-layer. -/
   attn   : MultiheadAttention α
+  /-- Pre-attention layer normalisation. -/
   ln1    : LayerNorm α
+  /-- Pre-FFN layer normalisation. -/
   ln2    : LayerNorm α
-  ffn1   : Linear α   -- expand: [embed_dim → ffn_dim]
-  ffn2   : Linear α   -- project: [ffn_dim → embed_dim]
+  /-- FFN expansion linear layer. -/
+  ffn1   : Linear α
+  /-- FFN projection linear layer. -/
+  ffn2   : Linear α
+  /-- Residual dropout. -/
   dropout : Dropout α
-  deriving Repr
+
+instance [Repr α] : Repr (TransformerBlock α) where
+  reprPrec x prec := Repr.addAppParen
+    f!"TransformerBlock \{ attn := {reprPrec x.attn 0}, ln1 := {reprPrec x.ln1 0}, ln2 := {reprPrec x.ln2 0}, ffn1 := {reprPrec x.ffn1 0}, ffn2 := {reprPrec x.ffn2 0}, dropout := {reprPrec x.dropout 0} }"
+    prec
 
 namespace TransformerBlock
 
+/-- Initialise a transformer block with the given dimensions. -/
 def init [Scalar α] (embedDim numHeads ffnDim : Nat)
     (eps : α) (dropoutP : Float := 0.0) : TransformerBlock α :=
   { attn    := MultiheadAttention.init embedDim numHeads dropoutP
@@ -147,15 +171,25 @@ end TransformerBlock
     Architecture:
       `TokenEmbed + PosEmbed → [TransformerBlock]*N → LayerNorm → head` -/
 structure Transformer (α : Type) where
-  tokenEmbed : Embedding α      -- [vocab_size, embed_dim]
-  posEmbed   : Tensor α          -- [max_seq_len, embed_dim]
+  /-- Token embedding table. -/
+  tokenEmbed : Embedding α
+  /-- Positional embedding tensor. -/
+  posEmbed   : Tensor α
+  /-- Stack of transformer encoder blocks. -/
   blocks     : Array (TransformerBlock α)
+  /-- Final layer normalisation. -/
   norm       : LayerNorm α
-  head       : Linear α          -- classification/LM head
-  deriving Repr
+  /-- Classification or language-model head. -/
+  head       : Linear α
+
+instance [Repr α] : Repr (Transformer α) where
+  reprPrec x prec := Repr.addAppParen
+    f!"Transformer \{ tokenEmbed := {reprPrec x.tokenEmbed 0}, posEmbed := {reprPrec x.posEmbed 0}, blocks := {reprPrec x.blocks 0}, norm := {reprPrec x.norm 0}, head := {reprPrec x.head 0} }"
+    prec
 
 namespace Transformer
 
+/-- Initialise the full transformer model. -/
 def init [Scalar α]
     (vocabSize embedDim numHeads ffnDim numLayers maxSeqLen outputDim : Nat)
     (eps : α) (dropoutP : Float := 0.0) : Transformer α :=
@@ -196,12 +230,19 @@ end Transformer
 -- RNN (Vanilla)
 -- ---------------------------------------------------------------------------
 
+/-- Vanilla recurrent neural network (wraps `RNNCell`). -/
 structure RNN (α : Type) where
+  /-- The underlying RNN cell. -/
   cell : RNNCell α
-  deriving Repr
+
+instance [Repr α] : Repr (RNN α) where
+  reprPrec x prec := Repr.addAppParen
+    f!"RNN \{ cell := {reprPrec x.cell 0} }"
+    prec
 
 namespace RNN
 
+/-- Initialise an RNN with the given input and hidden sizes. -/
 def init [Scalar α] (inputSize hiddenSize : Nat) : RNN α :=
   { cell := RNNCell.init inputSize hiddenSize }
 
@@ -219,15 +260,23 @@ end RNN
 -- LSTM
 -- ---------------------------------------------------------------------------
 
+/-- Long Short-Term Memory network (wraps `LSTMCell`). -/
 structure LSTM (α : Type) where
+  /-- The underlying LSTM cell. -/
   cell : LSTMCell α
-  deriving Repr
+
+instance [Repr α] : Repr (LSTM α) where
+  reprPrec x prec := Repr.addAppParen
+    f!"LSTM \{ cell := {reprPrec x.cell 0} }"
+    prec
 
 namespace LSTM
 
+/-- Initialise an LSTM. -/
 def init [Scalar α] (inputSize hiddenSize : Nat) : LSTM α :=
   { cell := LSTMCell.init inputSize hiddenSize }
 
+/-- Run the LSTM over a sequence, returning hidden states and final hidden. -/
 def forward [Inhabited α] [Add α] [Mul α] [Zero α] [Scalar α]
     (m : LSTM α) (xs : List (Tensor α)) (h0 c0 : Tensor α)
     : List (Tensor α) × Tensor α :=
@@ -242,15 +291,23 @@ end LSTM
 -- GRU
 -- ---------------------------------------------------------------------------
 
+/-- Gated Recurrent Unit network (wraps `GRUCell`). -/
 structure GRU (α : Type) where
+  /-- The underlying GRU cell. -/
   cell : GRUCell α
-  deriving Repr
+
+instance [Repr α] : Repr (GRU α) where
+  reprPrec x prec := Repr.addAppParen
+    f!"GRU \{ cell := {reprPrec x.cell 0} }"
+    prec
 
 namespace GRU
 
+/-- Initialise a GRU. -/
 def init [Scalar α] (inputSize hiddenSize : Nat) : GRU α :=
   { cell := GRUCell.init inputSize hiddenSize }
 
+/-- Run the GRU over a sequence, returning all hidden states. -/
 def forward [Inhabited α] [Add α] [Mul α] [Zero α] [Scalar α]
     (m : GRU α) (xs : List (Tensor α)) (h0 : Tensor α) : List (Tensor α) :=
   let (_, hs) := xs.foldl (fun (hPrev, acc) x =>

@@ -30,15 +30,22 @@ open TorchLib
 
 /-- A closed interval `[lo, hi]`. -/
 structure Interval where
+  /-- Lower endpoint of the interval. -/
   lo : Float
+  /-- Upper endpoint of the interval. -/
   hi : Float
-  deriving Repr
+
+instance : Repr Interval where
+  reprPrec i prec := Repr.addAppParen
+    f!"Interval \{ lo := {reprPrec i.lo 0}, hi := {reprPrec i.hi 0} }"
+    prec
 
 instance : Inhabited Interval where
   default := { lo := 0.0, hi := 0.0 }
 
 namespace Interval
 
+/-- Zero-width interval at the origin. -/
 def empty : Interval := { lo := 0.0, hi := 0.0 }
 
 /-- Point interval. -/

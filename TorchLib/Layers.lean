@@ -26,8 +26,11 @@ open IR
 /-- Any module that can (a) run forward, (b) emit its subgraph, and
     (c) expose its parameters as a `StateDict`. -/
 class Layer (L : Type) (α : Type) where
+  /-- Run one forward pass through the layer. -/
   forward  : L → Tensor α → Tensor α
+  /-- Return the layer's trainable parameters as a `StateDict`. -/
   params   : L → StateDict α
+  /-- Lower the layer to the shared IR computation graph. -/
   toGraph  : L → Builder → ValueId → (ValueId × Builder)
 
 -- ---------------------------------------------------------------------------
@@ -36,9 +39,15 @@ class Layer (L : Type) (α : Type) where
 
 /-- A fully-connected affine layer: `y = x W^T + b`. -/
 structure Linear (α : Type) where
-  weight : Tensor α   -- shape [out_features, in_features]
-  bias   : Tensor α   -- shape [out_features]
-  deriving Repr
+  /-- Weight matrix, shape `[out_features, in_features]`. -/
+  weight : Tensor α
+  /-- Bias vector, shape `[out_features]`. -/
+  bias   : Tensor α
+
+instance [Repr α] : Repr (Linear α) where
+  reprPrec x prec := Repr.addAppParen
+    f!"Linear \{ weight := {reprPrec x.weight 0}, bias := {reprPrec x.bias 0} }"
+    prec
 
 namespace Linear
 
@@ -67,6 +76,7 @@ def forward [Inhabited α] [Add α] [Mul α] [Zero α] (l : Linear α) (x : Tens
     { shape := [m, n], data }
   | _ => y
 
+/-- Emit the linear layer into the IR computation graph. -/
 def toGraph (l : Linear Float) (b : Builder) (inp : ValueId) : ValueId × Builder :=
   let wConst := l.weight   -- would be embedded as a ConstOp
   let _ := wConst
@@ -84,14 +94,23 @@ end Linear
     Input:  `[batch, C_in, H, W]`
     Output: `[batch, C_out, H', W']` -/
 structure Conv2d (α : Type) where
-  weight  : Tensor α   -- [C_out, C_in, kH, kW]
-  bias    : Tensor α   -- [C_out]
+  /-- Convolution kernel, shape `[C_out, C_in, kH, kW]`. -/
+  weight  : Tensor α
+  /-- Bias vector, shape `[C_out]`. -/
+  bias    : Tensor α
+  /-- Stride of the convolution. -/
   stride  : Nat := 1
+  /-- Zero-padding added to input borders. -/
   padding : Nat := 0
-  deriving Repr
+
+instance [Repr α] : Repr (Conv2d α) where
+  reprPrec x prec := Repr.addAppParen
+    f!"Conv2d \{ weight := {reprPrec x.weight 0}, bias := {reprPrec x.bias 0}, stride := {reprPrec x.stride 0}, padding := {reprPrec x.padding 0} }"
+    prec
 
 namespace Conv2d
 
+/-- Initialise a Conv2d layer with small constant weights. -/
 def init [Scalar α] (cIn cOut kH kW : Nat) : Conv2d α :=
   { weight  := Tensor.full [cOut, cIn, kH, kW] (Scalar.ofRat (1 / 100 : Rat) : α)
     bias    := Tensor.zeros [cOut] }
@@ -135,11 +154,17 @@ end Conv2d
 
 /-- Token embedding table: maps integer indices → dense vectors. -/
 structure Embedding (α : Type) where
-  weight : Tensor α   -- [vocab_size, embed_dim]
-  deriving Repr
+  /-- Embedding matrix, shape `[vocab_size, embed_dim]`. -/
+  weight : Tensor α
+
+instance [Repr α] : Repr (Embedding α) where
+  reprPrec x prec := Repr.addAppParen
+    f!"Embedding \{ weight := {reprPrec x.weight 0} }"
+    prec
 
 namespace Embedding
 
+/-- Initialise an embedding table (zero-filled). -/
 def init [Scalar α] (vocabSize embedDim : Nat) : Embedding α :=
   { weight := Tensor.full [vocabSize, embedDim] (Scalar.ofRat (0 : Rat) : α) }
 
@@ -164,20 +189,30 @@ end Embedding
 
 /-- Layer normalisation: normalise over the last `normalizedShape` dimensions. -/
 structure LayerNorm (α : Type) where
+  /-- Shape of the normalised dimensions. -/
   normalizedShape : Shape
-  weight : Tensor α   -- gain γ
-  bias   : Tensor α   -- shift β
+  /-- Learnable gain (γ). -/
+  weight : Tensor α
+  /-- Learnable shift (β). -/
+  bias   : Tensor α
+  /-- Small constant for numerical stability. -/
   eps    : α
-  deriving Repr
+
+instance [Repr α] : Repr (LayerNorm α) where
+  reprPrec x prec := Repr.addAppParen
+    f!"LayerNorm \{ normalizedShape := {reprPrec x.normalizedShape 0}, weight := {reprPrec x.weight 0}, bias := {reprPrec x.bias 0}, eps := {reprPrec x.eps 0} }"
+    prec
 
 namespace LayerNorm
 
+/-- Initialise layer normalisation with unit gain and zero shift. -/
 def init [Scalar α] (s : Shape) (eps : α) : LayerNorm α :=
   { normalizedShape := s
     weight := Tensor.ones s
     bias   := Tensor.zeros s
     eps    := eps }
 
+/-- Forward pass: normalise, scale by γ, shift by β. -/
 def forward [Inhabited α] [Scalar α] (l : LayerNorm α) (x : Tensor α) : Tensor α :=
   let xn := Tensor.layerNorm x l.eps
   -- scale and shift
@@ -189,19 +224,33 @@ end LayerNorm
 -- BatchNorm2d
 -- ---------------------------------------------------------------------------
 
+/-- 2-D batch normalisation layer. -/
 structure BatchNorm2d (α : Type) where
+  /-- Number of input channels. -/
   numFeatures : Nat
-  weight   : Tensor α   -- γ  [C]
-  bias     : Tensor α   -- β  [C]
+  /-- Learnable scale (γ), shape `[C]`. -/
+  weight   : Tensor α
+  /-- Learnable shift (β), shape `[C]`. -/
+  bias     : Tensor α
+  /-- Running mean for inference, shape `[C]`. -/
   runMean  : Tensor α
+  /-- Running variance for inference, shape `[C]`. -/
   runVar   : Tensor α
+  /-- Epsilon for numerical stability. -/
   eps      : α
+  /-- Momentum for running statistics update. -/
   momentum : α
+  /-- Whether the layer is in training mode. -/
   training : Bool := true
-  deriving Repr
+
+instance [Repr α] : Repr (BatchNorm2d α) where
+  reprPrec x prec := Repr.addAppParen
+    f!"BatchNorm2d \{ numFeatures := {reprPrec x.numFeatures 0}, weight := {reprPrec x.weight 0}, bias := {reprPrec x.bias 0}, runMean := {reprPrec x.runMean 0}, runVar := {reprPrec x.runVar 0}, eps := {reprPrec x.eps 0}, momentum := {reprPrec x.momentum 0}, training := {reprPrec x.training 0} }"
+    prec
 
 namespace BatchNorm2d
 
+/-- Initialise batch normalisation with identity transform. -/
 def init [Scalar α] (c : Nat) (eps momentum : α) : BatchNorm2d α :=
   { numFeatures := c
     weight   := Tensor.ones [c]
@@ -241,15 +290,21 @@ end BatchNorm2d
 
 /-- Dropout regularisation (training: zero elements with probability `p`). -/
 structure Dropout (α : Type) where
+  /-- Dropout probability (fraction of elements zeroed). -/
   p        : Float
+  /-- Whether dropout is active (enabled only during training). -/
   training : Bool := true
-  deriving Repr
+
+instance : Repr (Dropout α) where
+  reprPrec d prec := Repr.addAppParen
+    f!"Dropout \{ p := {reprPrec d.p 0}, training := {reprPrec d.training 0} }"
+    prec
 
 namespace Dropout
 
 /-- During inference dropout is the identity; during training we apply a
     Bernoulli mask.  We use a deterministic pseudo-random state for reproducibility. -/
-def forward [Inhabited α] [Scalar α] (d : Dropout α) (x : Tensor α) : Tensor α :=
+def forward [Scalar α] (d : Dropout α) (x : Tensor α) : Tensor α :=
   if !d.training || d.p == 0.0 then x
   else
     -- Simple LCG for deterministic masking (seed = 42)
@@ -277,17 +332,29 @@ end Dropout
 
     All projections are represented as `Linear` layers. -/
 structure MultiheadAttention (α : Type) where
+  /-- Total embedding dimension. -/
   embedDim : Nat
+  /-- Number of parallel attention heads. -/
   numHeads : Nat
-  wQ : Linear α   -- [embed_dim, embed_dim]
+  /-- Query projection. -/
+  wQ : Linear α
+  /-- Key projection. -/
   wK : Linear α
+  /-- Value projection. -/
   wV : Linear α
-  wO : Linear α   -- output projection
+  /-- Output projection. -/
+  wO : Linear α
+  /-- Attention dropout. -/
   dropout : Dropout α
-  deriving Repr
+
+instance [Repr α] : Repr (MultiheadAttention α) where
+  reprPrec x prec := Repr.addAppParen
+    f!"MultiheadAttention \{ embedDim := {reprPrec x.embedDim 0}, numHeads := {reprPrec x.numHeads 0}, wQ := {reprPrec x.wQ 0}, wK := {reprPrec x.wK 0}, wV := {reprPrec x.wV 0}, wO := {reprPrec x.wO 0}, dropout := {reprPrec x.dropout 0} }"
+    prec
 
 namespace MultiheadAttention
 
+/-- Initialise multi-head attention with given dimensions. -/
 def init [Scalar α] (embedDim numHeads : Nat) (dropoutP : Float := 0.0)
     : MultiheadAttention α :=
   { embedDim
@@ -325,16 +392,24 @@ end MultiheadAttention
 
 /-- Vanilla RNN cell: `h' = tanh(x W_ih^T + b_ih + h W_hh^T + b_hh)` -/
 structure RNNCell (α : Type) where
+  /-- Input-to-hidden linear transform. -/
   wIh : Linear α
+  /-- Hidden-to-hidden linear transform. -/
   wHh : Linear α
-  deriving Repr
+
+instance [Repr α] : Repr (RNNCell α) where
+  reprPrec x prec := Repr.addAppParen
+    f!"RNNCell \{ wIh := {reprPrec x.wIh 0}, wHh := {reprPrec x.wHh 0} }"
+    prec
 
 namespace RNNCell
 
+/-- Initialise an RNN cell. -/
 def init [Scalar α] (inputSize hiddenSize : Nat) : RNNCell α :=
   { wIh := Linear.init inputSize hiddenSize
     wHh := Linear.init hiddenSize hiddenSize }
 
+/-- Compute one RNN step: `h' = tanh(W_ih x + W_hh h)`. -/
 def forward [Inhabited α] [Add α] [Mul α] [Zero α] [Scalar α]
     (cell : RNNCell α) (x h : Tensor α) : Tensor α :=
   let ih := Linear.forward cell.wIh x
@@ -345,17 +420,24 @@ end RNNCell
 
 /-- LSTM cell: produces `(h', c')` from `(x, h, c)`. -/
 structure LSTMCell (α : Type) where
-  -- Weight matrix for [i, f, g, o] gates combined: [4*hidden, input+hidden]
-  wIh : Linear α   -- input → 4*hidden
-  wHh : Linear α   -- hidden → 4*hidden
-  deriving Repr
+  /-- Input-to-gates linear transform (4× hidden). -/
+  wIh : Linear α
+  /-- Hidden-to-gates linear transform (4× hidden). -/
+  wHh : Linear α
+
+instance [Repr α] : Repr (LSTMCell α) where
+  reprPrec x prec := Repr.addAppParen
+    f!"LSTMCell \{ wIh := {reprPrec x.wIh 0}, wHh := {reprPrec x.wHh 0} }"
+    prec
 
 namespace LSTMCell
 
+/-- Initialise an LSTM cell. -/
 def init [Scalar α] (inputSize hiddenSize : Nat) : LSTMCell α :=
   { wIh := Linear.init inputSize (4 * hiddenSize)
     wHh := Linear.init hiddenSize (4 * hiddenSize) }
 
+/-- Compute one LSTM step, returning `(h', c')`. -/
 def forward [Inhabited α] [Add α] [Mul α] [Zero α] [Scalar α]
     (cell : LSTMCell α) (x h c : Tensor α) : Tensor α × Tensor α :=
   let gates := Linear.forward cell.wIh x + Linear.forward cell.wHh h
@@ -387,16 +469,24 @@ end LSTMCell
 
 /-- GRU cell: produces `h'` from `(x, h)`. -/
 structure GRUCell (α : Type) where
-  wIh : Linear α   -- input → 3*hidden
-  wHh : Linear α   -- hidden → 3*hidden
-  deriving Repr
+  /-- Input-to-gates linear transform (3× hidden). -/
+  wIh : Linear α
+  /-- Hidden-to-gates linear transform (3× hidden). -/
+  wHh : Linear α
+
+instance [Repr α] : Repr (GRUCell α) where
+  reprPrec x prec := Repr.addAppParen
+    f!"GRUCell \{ wIh := {reprPrec x.wIh 0}, wHh := {reprPrec x.wHh 0} }"
+    prec
 
 namespace GRUCell
 
+/-- Initialise a GRU cell. -/
 def init [Scalar α] (inputSize hiddenSize : Nat) : GRUCell α :=
   { wIh := Linear.init inputSize (3 * hiddenSize)
     wHh := Linear.init hiddenSize (3 * hiddenSize) }
 
+/-- Compute one GRU step, returning updated hidden state. -/
 def forward [Inhabited α] [Add α] [Mul α] [Zero α] [Scalar α]
     (cell : GRUCell α) (x h : Tensor α) : Tensor α :=
   let ih := Linear.forward cell.wIh x

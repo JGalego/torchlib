@@ -45,11 +45,19 @@ open IBP
     - `loB`, `upB`: `[output_dim]`
 -/
 structure LinearBound where
-  loW : Tensor Float   -- lower bounding weight matrix
-  loB : Tensor Float   -- lower bounding bias
-  upW : Tensor Float   -- upper bounding weight matrix
-  upB : Tensor Float   -- upper bounding bias
-  deriving Repr
+  /-- Lower bounding weight matrix, shape `[output_dim, input_dim]`. -/
+  loW : Tensor Float
+  /-- Lower bounding bias, shape `[output_dim]`. -/
+  loB : Tensor Float
+  /-- Upper bounding weight matrix, shape `[output_dim, input_dim]`. -/
+  upW : Tensor Float
+  /-- Upper bounding bias, shape `[output_dim]`. -/
+  upB : Tensor Float
+
+instance : Repr LinearBound where
+  reprPrec lb prec := Repr.addAppParen
+    f!"LinearBound \{ loW := {reprPrec lb.loW 0}, loB := {reprPrec lb.loB 0}, upW := {reprPrec lb.upW 0}, upB := {reprPrec lb.upB 0} }"
+    prec
 
 namespace LinearBound
 
@@ -91,11 +99,19 @@ end LinearBound
     `α · x + β_lo ≤ σ(x) ≤ α · x + β_up`
     where `α` is the lower-bound slope, `β_lo`/`β_up` are intercepts. -/
 structure AffineRelax where
+  /-- Lower-bound slope. -/
   loSlope : Float
+  /-- Lower-bound intercept. -/
   loIntercept : Float
+  /-- Upper-bound slope. -/
   upSlope : Float
+  /-- Upper-bound intercept. -/
   upIntercept : Float
-  deriving Repr
+
+instance : Repr AffineRelax where
+  reprPrec ar prec := Repr.addAppParen
+    f!"AffineRelax \{ loSlope := {reprPrec ar.loSlope 0}, loIntercept := {reprPrec ar.loIntercept 0}, upSlope := {reprPrec ar.upSlope 0}, upIntercept := {reprPrec ar.upIntercept 0} }"
+    prec
 
 namespace AffineRelax
 
@@ -155,7 +171,11 @@ structure CrownState where
   bound : LinearBound
   /-- Per-neuron pre-activation bounds (from IBP forward pass). -/
   preActBounds : List (ITensor)
-  deriving Repr
+
+instance : Repr CrownState where
+  reprPrec cs prec := Repr.addAppParen
+    f!"CrownState \{ bound := {reprPrec cs.bound 0}, preActBounds := {reprPrec cs.preActBounds 0} }"
+    prec
 
 -- ---------------------------------------------------------------------------
 -- CROWN propagation through a linear stack

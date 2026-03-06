@@ -11,17 +11,21 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
-
       - id: lake-build
         name: Lake Build
         entry: lake build
         language: system
         pass_filenames: false
         always_run: true
-
       - id: lake-test
         name: Lake Test
         entry: lake test
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: lake-lint
+        name: Lake Lint
+        entry: lake lint
         language: system
         pass_filenames: false
         always_run: true
