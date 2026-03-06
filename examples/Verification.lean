@@ -16,6 +16,9 @@ the ball.  These bounds can be used to certify adversarial robustness.
 
 open TorchLib TorchLib.Verification
 
+private def say [Repr α] (label : String) (v : α) : IO Unit :=
+  IO.println s!"{label}: {reprStr v}"
+
 -- ---------------------------------------------------------------------------
 -- Network under analysis
 -- ---------------------------------------------------------------------------
@@ -31,8 +34,8 @@ def x0 : Tensor Float := Tensor.full [1, 4] 0.5
 
 def nominalOutput : Tensor Float := MLP.forward net x0
 
-#eval nominalOutput.shape   -- [1, 2]
-#eval nominalOutput.data
+#eval say "nominal output shape" nominalOutput.shape
+#eval say "nominal output data"  nominalOutput.data
 
 -- ---------------------------------------------------------------------------
 -- IBP: propagate interval bounds with ε = 0.1
@@ -43,9 +46,9 @@ def eps : Float := 0.1
 -- Build the interval tensor  [x0 - ε, x0 + ε]  element-wise
 def inputBounds : ITensor := ITensor.fromCenterRadius x0 eps
 
-#eval inputBounds.shape        -- [1, 4]
-#eval (inputBounds.map (·.lo)).data   -- all 0.4
-#eval (inputBounds.map (·.hi)).data   -- all 0.6
+#eval say "input bounds shape" inputBounds.shape
+#eval say "input bounds lo"   (inputBounds.map (·.lo)).data
+#eval say "input bounds hi"   (inputBounds.map (·.hi)).data
 
 -- Propagate through the MLP
 def outputBounds : ITensor := IBP.mlp net inputBounds
@@ -53,23 +56,23 @@ def outputBounds : ITensor := IBP.mlp net inputBounds
 def loBounds : Tensor Float := outputBounds.map (·.lo)
 def hiBounds : Tensor Float := outputBounds.map (·.hi)
 
-#eval loBounds.data   -- lower bound on each output logit
-#eval hiBounds.data   -- upper bound on each output logit
+#eval say "output lo bounds" loBounds.data
+#eval say "output hi bounds" hiBounds.data
 
 -- ---------------------------------------------------------------------------
 -- Certified robustness check
 -- ---------------------------------------------------------------------------
 
 -- The nominal output is within the certified bounds
-#eval ITensor.contains outputBounds nominalOutput   -- true
+#eval say "nominal in bounds?" (ITensor.contains outputBounds nominalOutput)
 
 -- Convenience wrapper: center + ε → (lo, hi) tensors
 def mlpBoundsResult := IBP.mlpBounds net x0 eps
 def lo := mlpBoundsResult.1
 def hi := mlpBoundsResult.2
 
-#eval lo.data
-#eval hi.data
+#eval say "mlpBounds lo" lo.data
+#eval say "mlpBounds hi" hi.data
 
 -- ---------------------------------------------------------------------------
 -- Margin and robustness certificate
@@ -90,7 +93,7 @@ def certifyClass0 (lo hi : Tensor Float) : String :=
   else
     s!"NOT certified  (gap = {lo0 - hi1}, try smaller ε)"
 
-#eval certifyClass0 lo hi
+#eval say "certificate" (certifyClass0 lo hi)
 
 -- ---------------------------------------------------------------------------
 -- Sweep over radii to find the largest certifiable ε

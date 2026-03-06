@@ -13,6 +13,9 @@ Demonstrates loss functions and optimizers (SGD, Adam) from
 
 open TorchLib TorchLib.Runtime
 
+private def say [Repr α] (label : String) (v : α) : IO Unit :=
+  IO.println s!"{label}: {reprStr v}"
+
 -- ---------------------------------------------------------------------------
 -- Loss functions
 -- ---------------------------------------------------------------------------
@@ -21,7 +24,7 @@ open TorchLib TorchLib.Runtime
 def pred4   : Tensor Float := { shape := [4], data := #[1.0, 2.0, 3.0, 4.0] }
 def target4 : Tensor Float := { shape := [4], data := #[1.5, 2.5, 3.5, 4.5] }
 
-#eval mseLoss pred4 target4   -- 0.25  (each diff = -0.5, squared = 0.25)
+#eval say "mseLoss"          (mseLoss pred4 target4)
 
 -- Cross-entropy from logits: 2 samples, 3 classes
 -- Targets: sample 0 → class 2, sample 1 → class 0
@@ -29,13 +32,13 @@ def logits23 : Tensor Float :=
   { shape := [2, 3], data := #[0.1, 0.2, 2.0,   -- sample 0: class 2 has high score
                                 1.8, 0.1, 0.5] } -- sample 1: class 0 has high score
 
-#eval crossEntropyLoss logits23 #[2, 0]   -- low loss (correct classes score highest)
+#eval say "crossEntropyLoss" (crossEntropyLoss logits23 #[2, 0])
 
 -- Binary cross-entropy: predictions vs binary targets
 def probs : Tensor Float := { shape := [4], data := #[0.9, 0.1, 0.8, 0.2] }
 def btgt  : Tensor Float := { shape := [4], data := #[1.0, 0.0, 1.0, 0.0] }
 
-#eval binaryCELoss probs btgt   -- low loss
+#eval say "binaryCELoss"     (binaryCELoss probs btgt)
 
 -- ---------------------------------------------------------------------------
 -- SGD optimizer: one parameter update step
@@ -54,8 +57,7 @@ def sgdStep1   := SGD.step sgdCfg sgdSt0 [("w", w0, grad)]
 def sgdSt1     := sgdStep1.1
 def newParams1 := sgdStep1.2
 
-#eval newParams1.map (fun (n, p) => (n, p.data))
--- [("w", #[0.99, 1.98, 2.97])]
+#eval say "SGD (no momentum)"  (newParams1.map (fun (n, p) => (n, p.data)))
 
 -- ---------------------------------------------------------------------------
 -- SGD with momentum
@@ -73,7 +75,7 @@ def sgdMomSt1   := sgdMomStep1.1
 def sgdMomStep2 := SGD.step sgdMomCfg sgdMomSt1 [("w", w0, grad)]
 def newParams2  := sgdMomStep2.2
 
-#eval newParams2.map (fun (_, p) => p.data)
+#eval say "SGD (momentum=0.9)" (newParams2.map (fun (_, p) => p.data))
 
 -- ---------------------------------------------------------------------------
 -- Adam optimizer
@@ -88,13 +90,13 @@ def adamStep1   := Adam.step adamCfg adamSt0 [("w", w0, grad)]
 def adamSt1     := adamStep1.1
 def adamParams1 := adamStep1.2
 
-#eval adamParams1.map (fun (n, p) => (n, p.data))
+#eval say "Adam step 1" (adamParams1.map (fun (n, p) => (n, p.data)))
 
 -- Step 2 (bias correction changes the effective learning rate)
 def adamStep2   := Adam.step adamCfg adamSt1 [("w", w0, grad)]
 def adamParams2 := adamStep2.2
 
-#eval adamParams2.map (fun (_, p) => p.data)
+#eval say "Adam step 2" (adamParams2.map (fun (_, p) => p.data))
 
 -- ---------------------------------------------------------------------------
 -- Manual training loop sketch

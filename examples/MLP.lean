@@ -11,6 +11,9 @@ and `CNN` models from `TorchLib.Models`.
 
 open TorchLib
 
+private def say [Repr α] (label : String) (v : α) : IO Unit :=
+  IO.println s!"{label}: {reprStr v}"
+
 -- ---------------------------------------------------------------------------
 -- Building an MLP
 -- ---------------------------------------------------------------------------
@@ -19,8 +22,8 @@ open TorchLib
 def mlp : MLP Float := MLP.init 784 [256, 128] 10
 
 -- Inspect structure
-#eval mlp.layers.size    -- 3  (784→256, 256→128, 128→10)
-#eval mlp.outputSize     -- 10
+#eval say "mlp.layers.size" mlp.layers.size
+#eval say "mlp.outputSize"  mlp.outputSize
 
 -- ---------------------------------------------------------------------------
 -- Forward pass: single image (flat 28×28)
@@ -30,7 +33,7 @@ def img : Tensor Float := Tensor.zeros [1, 784]
 
 def logits : Tensor Float := MLP.forward mlp img
 
-#eval logits.shape   -- [1, 10]
+#eval say "logits.shape" logits.shape
 
 -- ---------------------------------------------------------------------------
 -- Forward pass: mini-batch of 8 images
@@ -40,7 +43,7 @@ def batch8 : Tensor Float := Tensor.ones [8, 784]
 
 def batchLogits : Tensor Float := MLP.forward mlp batch8
 
-#eval batchLogits.shape   -- [8, 10]
+#eval say "batchLogits.shape" batchLogits.shape
 
 -- ---------------------------------------------------------------------------
 -- Small MLP for inspection (2-in, 1-out, one hidden layer of 4)
@@ -49,24 +52,22 @@ def batchLogits : Tensor Float := MLP.forward mlp batch8
 def tiny : MLP Float := MLP.init 2 [4] 1
 
 -- Weight shapes for each layer
-#eval tiny.layers.map (fun l => l.weight.shape)
--- #[[4, 2], [1, 4]]
+#eval say "tiny weight shapes" (tiny.layers.map (fun l => l.weight.shape))
 
 -- Bias shapes
-#eval tiny.layers.map (fun l => l.bias.shape)
--- #[[4], [1]]
+#eval say "tiny bias shapes"   (tiny.layers.map (fun l => l.bias.shape))
 
 -- Run a single 2-feature sample
 def x2 : Tensor Float := { shape := [1, 2], data := #[1.0, -1.0] }
 def y2 : Tensor Float := MLP.forward tiny x2
-#eval y2.shape   -- [1, 1]
+#eval say "y2.shape" y2.shape
 
 -- ---------------------------------------------------------------------------
 -- MLP with dropout
 -- ---------------------------------------------------------------------------
 
 def mlpDrop : MLP Float := MLP.init 32 [64, 32] 10 (dropoutP := 0.5)
-#eval mlpDrop.dropout.p   -- 0.5
+#eval say "mlpDrop.dropout.p" mlpDrop.dropout.p
 
 -- ---------------------------------------------------------------------------
 -- CNN: convolutional network
@@ -76,5 +77,5 @@ def mlpDrop : MLP Float := MLP.init 32 [64, 32] 10 (dropoutP := 0.5)
 def cnn : CNN Float :=
   CNN.init [(1, 8, 3), (8, 16, 3)] 400 10 [128]
 
-#eval cnn.convBlocks.size   -- 2
-#eval cnn.head.outputSize   -- 10
+#eval say "cnn.convBlocks.size" cnn.convBlocks.size
+#eval say "cnn.head.outputSize" cnn.head.outputSize

@@ -14,6 +14,9 @@ in reverse during `backward` to accumulate gradients.
 
 open TorchLib TorchLib.Runtime
 
+private def say [Repr α] (label : String) (v : α) : IO Unit :=
+  IO.println s!"{label}: {reprStr v}"
+
 -- ---------------------------------------------------------------------------
 -- Helper: create engine, variables, run backward, read gradient
 -- ---------------------------------------------------------------------------
@@ -21,6 +24,7 @@ open TorchLib TorchLib.Runtime
 /-- Simple scalar loss: `loss = relu(x)`, `x = 3.0`.
     Expected: `d(loss)/dx = 1.0`  (since x > 0). -/
 def exReluGrad : IO Unit := do
+  IO.println "\n--- relu grad: loss = relu(x), x = 3.0 ---"
   let eng ← AutogradEngine.init
 
   -- Create leaf variable x = [[3.0]]
@@ -48,6 +52,7 @@ def exReluGrad : IO Unit := do
 /-- `loss = (x - 2.0)^2`, x = 5.0.
     Expected: grad = 2*(5-2) = 6.0. -/
 def exSquaredLoss : IO Unit := do
+  IO.println "\n--- squared loss: loss = (x - 2)², x = 5.0 ---"
   let eng ← AutogradEngine.init
 
   let x   ← eng.mkVar { shape := [1], data := #[5.0] }
@@ -76,6 +81,7 @@ def exSquaredLoss : IO Unit := do
 -- ---------------------------------------------------------------------------
 
 def exSigmoidChain : IO Unit := do
+  IO.println "\n--- sigmoid chain: y = sigmoid(w·x + b), w=0.5, x=1.0 ---"
   let eng ← AutogradEngine.init
 
   -- scalar inputs
@@ -113,4 +119,4 @@ def exExpVjp : List (Tensor Float) :=
   let dL  : Tensor Float := { shape := [1], data := #[1.0] }
   vjp .exp [x] dL
 
-#eval exExpVjp   -- [{ shape := [1], data := #[1.0] }]
+#eval say "exp VJP at x=0" exExpVjp

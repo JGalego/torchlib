@@ -11,6 +11,9 @@ from `TorchLib.Layers`.
 
 open TorchLib
 
+private def say [Repr α] (label : String) (v : α) : IO Unit :=
+  IO.println s!"{label}: {reprStr v}"
+
 -- ---------------------------------------------------------------------------
 -- Initialization
 -- ---------------------------------------------------------------------------
@@ -19,8 +22,8 @@ open TorchLib
 -- Weights are initialized to 0.1, bias to 0.0
 def fc : Linear Float := Linear.init 4 2
 
-#eval fc.weight.shape   -- [2, 4]
-#eval fc.bias.shape     -- [2]
+#eval say "fc.weight.shape" fc.weight.shape
+#eval say "fc.bias.shape"   fc.bias.shape
 
 -- ---------------------------------------------------------------------------
 -- Forward pass
@@ -33,8 +36,8 @@ def input1 : Tensor Float := Tensor.ones [1, 4]
 -- Each output = sum(w_j * 1.0) + 0.0  = 4 * 0.1 = 0.4
 def out1 : Tensor Float := Linear.forward fc input1
 
-#eval out1.shape   -- [1, 2]
-#eval out1.data    -- #[0.4, 0.4]
+#eval say "out1.shape" out1.shape
+#eval say "out1.data"  out1.data
 
 -- ---------------------------------------------------------------------------
 -- Batch forward pass
@@ -45,8 +48,8 @@ def input3 : Tensor Float := Tensor.ones [3, 4]
 
 def out3 : Tensor Float := Linear.forward fc input3
 
-#eval out3.shape   -- [3, 2]
-#eval out3.data    -- #[0.4, 0.4, 0.4, 0.4, 0.4, 0.4]
+#eval say "out3.shape" out3.shape
+#eval say "out3.data"  out3.data
 
 -- ---------------------------------------------------------------------------
 -- Custom weights: identity-like layer (in=2, out=2)
@@ -61,4 +64,4 @@ def fc2 : Linear Float :=
 -- Expected output: [2*3 + 1, 2*4 - 1] = [7, 7]
 def input2 : Tensor Float := { shape := [1, 2], data := #[3.0, 4.0] }
 
-#eval (Linear.forward fc2 input2).data   -- #[7.0, 7.0]
+#eval say "fc2 [[3,4]]" (Linear.forward fc2 input2).data
