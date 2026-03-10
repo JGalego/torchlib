@@ -134,4 +134,4 @@ Here's a feature-by-feature comparison between [TorchLean](assets/docs/TorchLean
 
 ## License
 
-This project is licensed under the Apache 2.0 License. See [LICENSE](LICENSE) for details.
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
