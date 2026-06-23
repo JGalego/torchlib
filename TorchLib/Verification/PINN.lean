@@ -139,7 +139,11 @@ structure CertifiedResidual where
   maxAbs    : Float
   /-- Whether `maxAbs ≤ tol`, i.e. the residual is certified small. -/
   certified : Bool
-  deriving Repr
+
+instance : Repr CertifiedResidual where
+  reprPrec c prec := Repr.addAppParen
+    f!"CertifiedResidual \{ enclosure := {reprPrec c.enclosure 0}, maxAbs := {reprPrec c.maxAbs 0}, certified := {reprPrec c.certified 0} }"
+    prec
 
 /-- Certify that a PINN's PDE residual stays within `±tol` over `[domLo, domHi]`.
 

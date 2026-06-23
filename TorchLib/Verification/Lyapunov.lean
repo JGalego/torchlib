@@ -203,7 +203,11 @@ structure Result where
   minV           : Float
   /-- Whether stability is certified on the whole region. -/
   certified      : Bool
-  deriving Repr
+
+instance : Repr Result where
+  reprPrec r prec := Repr.addAppParen
+    f!"Result \{ cells := {reprPrec r.cells 0}, certifiedCells := {reprPrec r.certifiedCells 0}, worstDeltaV := {reprPrec r.worstDeltaV 0}, minV := {reprPrec r.minV 0}, certified := {reprPrec r.certified 0} }"
+    prec
 
 /-- Certify a Lyapunov function for the closed-loop map `f` (an `MLP` mapping a
     state to the next state) over the box region `∏ [losᵢ, hisᵢ]`, using the
