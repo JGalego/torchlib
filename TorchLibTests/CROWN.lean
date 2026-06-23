@@ -42,19 +42,41 @@ private def width (lohi : Tensor Float × Tensor Float) : Float :=
   IO.println "✓ IBP / CROWN / α-CROWN all bound the true output (sound)"
 
 #eval do
-  -- CROWN is at least as tight as IBP, and α-CROWN at least as tight as CROWN
+  -- Invariant: α-CROWN is never looser than CROWN (it starts from CROWN's
+  -- adaptive slopes and keeps the tightest result).  Note CROWN ≤ IBP is NOT
+  -- a general invariant, so we do not assert it.
   let wIBP := width (IBP.mlpBounds m center eps)
   let wCR  := width (CROWN.mlpBounds m center eps)
   let wA   := width (AlphaCROWN.bounds m center eps)
-  assert! wCR ≤ wIBP + 1e-9
-  assert! wA  ≤ wCR + 1e-9
-  IO.println s!"✓ width: IBP={wIBP} ≥ CROWN={wCR} ≥ αCROWN={wA}"
+  assert! wA ≤ wCR + 1e-9
+  IO.println s!"✓ α-CROWN ≤ CROWN in width (IBP={wIBP}, CROWN={wCR}, αCROWN={wA})"
+
+-- 2 → 3 → 3 → 1 (two hidden ReLU layers): here optimising the slopes actually
+-- helps, so α-CROWN should be *strictly* tighter than CROWN.
+private def deep : MLP Float :=
+  { layers := #[ { weight := { shape := [3, 2], data := #[1.0, -1.0, 0.7, 0.8, -0.9, 0.5] }
+                   bias   := { shape := [3], data := #[0.1, -0.1, 0.2] } },
+                 { weight := { shape := [3, 3], data := #[0.6, -0.7, 0.5, -0.8, 0.9, -0.4, 0.3, -0.6, 0.7] }
+                   bias   := { shape := [3], data := #[0.0, 0.1, -0.1] } },
+                 { weight := { shape := [1, 3], data := #[1.0, -1.0, 0.8] }
+                   bias   := { shape := [1], data := #[0.0] } } ]
+    dropout := { p := 0.0 }, outputSize := 1 }
 
 #eval do
-  -- crownIBP hybrid is sound and no looser than either parent on each side
-  let (l, h) := computeBounds .crownIBP m center eps
-  let y := (MLP.forward m center).data.get! 0
+  let wCR := width (CROWN.mlpBounds deep center 0.15)
+  let wA  := width (AlphaCROWN.bounds deep center 0.15)
+  assert! wA < wCR - 1e-6    -- α-CROWN genuinely optimises (not a no-op)
+  IO.println s!"✓ α-CROWN strictly tightens CROWN on a 2-hidden-layer net ({wCR} → {wA})"
+
+#eval do
+  -- crownIBP hybrid is sound and (per element) no looser than either parent,
+  -- so its width is ≤ both — a genuine invariant, even when CROWN > IBP.
+  let (l, h) := computeBounds .crownIBP deep center 0.15
+  let y := (MLP.forward deep center).data.get! 0
   assert! l.data.get! 0 ≤ y && y ≤ h.data.get! 0
-  IO.println "✓ CROWN-IBP hybrid is sound"
+  let wHy := width (l, h)
+  assert! wHy ≤ width (IBP.mlpBounds deep center 0.15) + 1e-9
+  assert! wHy ≤ width (CROWN.mlpBounds deep center 0.15) + 1e-9
+  IO.println "✓ CROWN-IBP hybrid is sound and ≤ both IBP and CROWN in width"
 
 end TorchLibTests

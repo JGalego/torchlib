@@ -14,7 +14,7 @@ A [Lean 4](https://lean-lang.org/) library for neural network modeling, training
 
 **TorchLib** brings deep learning primitives to Lean 4, combining expressive neural network construction with formal verification techniques.
 
-It provides a composable layer system, automatic differentiation, a training loop, and certified robustness verification via Interval Bound Propagation (IBP) and CROWN.
+It provides a composable layer system, automatic differentiation, a training loop, an IEEE-754 binary32 execution path, and certified verification via IBP, CROWN/α-CROWN, PINN residual bounds, and Lyapunov stability.
 
 ## Features
 
@@ -24,8 +24,10 @@ It provides a composable layer system, automatic differentiation, a training loo
 - **Model construction** - high-level API for defining neural networks
 - **Automatic differentiation** - forward and backward pass via `Autograd`
 - **Training** - loss functions, optimizers, and training loops
-- **Formal verification** - certified robustness bounds via IBP and CROWN
-- **Certificates** - machine-checkable proofs of network properties
+- **IEEE-754 binary32 kernel** - genuine single-precision execution (`Scalar Float32` + `IEEE32Exec`)
+- **Robustness verification** - certified output bounds via IBP, CROWN, and slope-optimised α-CROWN
+- **Scientific & control verification** - certified PINN residual bounds and Lyapunov stability
+- **Certificates** - machine-checkable witnesses plus a checkpoint+query CLI
 
 ## Project Structure
 
@@ -126,7 +128,7 @@ Here's a feature-by-feature comparison between [TorchLean](assets/docs/TorchLean
 | Compiled mode (lower to SSA/DAG IR) | ✅ | 🚧 |
 | Op-tagged SSA/DAG IR + interpreter | ✅ | ✅ |
 | IEEE-754 binary32 kernel (IEEE32Exec) | ✅ | ✅ |
-| Proof-relevant rounding models | ✅ | 🚧 |
+| Proof-relevant rounding models | ✅ | ❌ |
 | Reverse-mode autograd | ✅ | ✅ |
 | Optimisers (SGD, Adam, AdamW, RMSProp) | ✅ | ✅ |
 | IBP bound propagation | ✅ | ✅ |
