@@ -37,12 +37,15 @@ TorchLib/
 ├── Models.lean         # High-level model API
 ├── Runtime/
 │   ├── Autograd.lean   # Automatic differentiation
+│   ├── Float32.lean    # IEEE-754 binary32 kernel (IEEE32Exec)
 │   ├── TorchLean.lean  # LibTorch/runtime bindings
 │   └── Training.lean   # Training loop and optimizers
 └── Verification/
-    ├── Certificate.lean # Verification certificates
-    ├── CROWN.lean       # CROWN bound propagation
-    └── IBP.lean         # Interval Bound Propagation
+    ├── Certificate.lean # Verification certificates + CLI
+    ├── CROWN.lean       # CROWN / α-CROWN bound propagation
+    ├── IBP.lean         # Interval Bound Propagation
+    ├── Lyapunov.lean    # Lyapunov controller verification
+    └── PINN.lean        # Certified PINN residual bounds
 ```
 
 ## Requirements
@@ -105,6 +108,10 @@ lake env lean examples/Autograd.lean
 lake env lean examples/Training.lean
 lake env lean examples/Verification.lean
 lake env lean examples/VerificationMNIST.lean
+lake env lean examples/AlphaCROWN.lean
+lake env lean examples/Float32.lean
+lake env lean examples/PINN.lean
+lake env lean examples/Lyapunov.lean
 ```
 
 ## TorchLean vs TorchLib
@@ -118,17 +125,17 @@ Here's a feature-by-feature comparison between [TorchLean](assets/docs/TorchLean
 | Eager API (layers, models, training) | ✅ | ✅ |
 | Compiled mode (lower to SSA/DAG IR) | ✅ | 🚧 |
 | Op-tagged SSA/DAG IR + interpreter | ✅ | ✅ |
-| IEEE-754 binary32 kernel (IEEE32Exec) | ✅ | ❌ |
-| Proof-relevant rounding models | ✅ | ❌ |
+| IEEE-754 binary32 kernel (IEEE32Exec) | ✅ | ✅ |
+| Proof-relevant rounding models | ✅ | 🚧 |
 | Reverse-mode autograd | ✅ | ✅ |
 | Optimisers (SGD, Adam, AdamW, RMSProp) | ✅ | ✅ |
 | IBP bound propagation | ✅ | ✅ |
 | CROWN / LiRPA back-substitution | ✅ | ✅ |
-| α-CROWN (learnable slopes) | ✅ | 🚧 |
-| Certificate checking | ✅ | ✅ |
+| α-CROWN (learnable slopes) | ✅ | ✅ |
+| Certificate checking + CLI | ✅ | ✅ |
 | Certified robustness (end-to-end) | ✅ | ✅ |
-| PINN residual bounds | ✅ | ❌ |
-| Lyapunov controller verification | ✅ | ❌ |
+| PINN residual bounds | ✅ | ✅ |
+| Lyapunov controller verification | ✅ | ✅ |
 | Universal approximation theorem | ✅ | ❌ |
 | Checkpoint import / export | ✅ | ✅ |
 

@@ -27,6 +27,38 @@ over a scalar type `α` so that the same network definition can be:
 /-- `Int.toFloat` — not built-in in Lean 4.28. -/
 @[inline] def Int.toFloat (n : Int) : Float := Float.ofInt n
 
+/-- `String.toFloat?` — parse a decimal float (`±d.dddd`, optional `e±dd`
+    exponent); `none` on malformed input.  Not built-in in this toolchain. -/
+def String.toFloat? (s : String) : Option Float := Id.run do
+  let cs := s.toList.toArray
+  let n := cs.size
+  if n == 0 then return none
+  let mut i := 0
+  let mut sign := 1.0
+  if cs[0]! == '-' then sign := -1.0; i := 1
+  else if cs[0]! == '+' then i := 1
+  let mut mant  := 0.0
+  let mut scale := 1.0
+  let mut frac  := false
+  let mut saw   := false
+  while i < n && (cs[i]!.isDigit || cs[i]! == '.') do
+    if cs[i]! == '.' then frac := true
+    else
+      saw := true
+      mant := mant * 10.0 + Float.ofNat (cs[i]!.toNat - 48)
+      if frac then scale := scale * 10.0
+    i := i + 1
+  let mut expv  := 0.0
+  let mut esign := 1.0
+  if i < n && (cs[i]! == 'e' || cs[i]! == 'E') then
+    i := i + 1
+    if i < n && cs[i]! == '-' then esign := -1.0; i := i + 1
+    else if i < n && cs[i]! == '+' then i := i + 1
+    while i < n && cs[i]!.isDigit do
+      expv := expv * 10.0 + Float.ofNat (cs[i]!.toNat - 48); i := i + 1
+  if !saw then return none
+  return some (sign * mant / scale * Float.pow 10.0 (esign * expv))
+
 namespace TorchLib
 
 -- ---------------------------------------------------------------------------
@@ -97,16 +129,78 @@ instance : Scalar Float where
   inv x     := 1.0 / x
   abs x     := Float.abs x
 
-/-! ## Rat scalar instance -/
+/-! ## Rational approximations of transcendental functions
+
+`Rat` has no exact `sqrt`/`exp`/`log`, so we provide convergent rational
+approximations.  Each iterative step rounds to a fixed denominator
+(`roundP`) so the numerators/denominators stay bounded instead of blowing up
+exponentially.  Accuracy is ~9 significant digits, which is enough to use
+`α = Rat` as a checkable stand-in for `ℝ` in tests and small proofs. -/
+namespace RatApprox
+
+/-- Round `x` to the nearest multiple of `1/den`, keeping iterative
+    rationals bounded in size. -/
+def roundP (x : Rat) (den : Nat := 1000000000) : Rat :=
+  let n : Int := (x * (den : Rat) + (1 : Rat) / 2).floor
+  (n : Rat) / (den : Rat)
+
+/-- `√x` via Newton's iteration `g ↦ (g + x/g)/2` (returns `0` for `x ≤ 0`). -/
+def sqrt (x : Rat) : Rat :=
+  if x ≤ 0 then 0 else Id.run do
+    let mut g : Rat := if x ≥ 1 then x else 1
+    for _ in [:50] do
+      g := roundP ((g + x / g) / 2)
+    return g
+
+/-- `eˣ` for `|x| ≤ 1` via a truncated Taylor series. -/
+def expSmall (x : Rat) : Rat := Id.run do
+  let mut term : Rat := 1
+  let mut sum  : Rat := 1
+  for k in [1:25] do
+    term := roundP (term * x / (k : Rat))
+    sum  := roundP (sum + term)
+  return sum
+
+/-- `eˣ` via range reduction to `|x| ≤ 1` followed by repeated squaring. -/
+def exp (x : Rat) : Rat :=
+  let ax := if x ≥ 0 then x else -x
+  let m  := if ax ≤ 1 then 0 else Nat.log2 ax.ceil.toNat + 1
+  let xr := x / ((2 ^ m : Nat) : Rat)
+  Id.run do
+    let mut r := expSmall xr
+    for _ in [:m] do r := roundP (r * r)
+    return r
+
+/-- `log x` via Newton's iteration on `eʸ = x` (returns `0` for `x ≤ 0`). -/
+def log (x : Rat) : Rat :=
+  if x ≤ 0 then 0 else Id.run do
+    let mut y : Rat := x - 1
+    for _ in [:60] do
+      y := roundP (y - 1 + x / exp y)
+    return y
+
+/-- `tanh x = (e²ˣ − 1)/(e²ˣ + 1)`. -/
+def tanh (x : Rat) : Rat :=
+  let e := exp (2 * x)
+  roundP ((e - 1) / (e + 1))
+
+/-- `σ(x) = 1/(1 + e⁻ˣ)`. -/
+def sigmoid (x : Rat) : Rat := roundP (1 / (1 + exp (-x)))
+
+end RatApprox
+
+/-! ## Rat scalar instance
+
+Algebraic operations are exact; transcendental ones use `RatApprox`. -/
 instance : Scalar Rat where
   ofNat n   := (n : Rat)
   ofRat r   := r
-  sqrt _    := 0  -- not computable for Rat; placeholder
-  exp _     := 0
-  log _     := 0
-  sigmoid _ := 0
+  sqrt      := RatApprox.sqrt
+  exp       := RatApprox.exp
+  log       := RatApprox.log
+  sigmoid   := RatApprox.sigmoid
   relu x    := if x > 0 then x else 0
-  tanh _    := 0
+  tanh      := RatApprox.tanh
   inv x     := x⁻¹
   abs x     := if x ≥ 0 then x else -x
 

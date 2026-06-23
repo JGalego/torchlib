@@ -14,6 +14,10 @@ def examples : Array String :=
    , "Autograd"
    , "Training"
    , "Verification"
+   , "AlphaCROWN"
+   , "Float32"
+   , "PINN"
+   , "Lyapunov"
    ]
 
 def main (_ : List String) : IO UInt32 := do

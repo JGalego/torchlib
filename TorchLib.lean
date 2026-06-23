@@ -8,11 +8,14 @@ import TorchLib.Models
 import TorchLib.Runtime.Autograd
 import TorchLib.Runtime.Training
 import TorchLib.Runtime.TorchLean
+import TorchLib.Runtime.Float32
 
 -- NN.Verification — verification layer
 import TorchLib.Verification.IBP
 import TorchLib.Verification.CROWN
 import TorchLib.Verification.Certificate
+import TorchLib.Verification.PINN
+import TorchLib.Verification.Lyapunov
 
 /-!
 # TorchLib

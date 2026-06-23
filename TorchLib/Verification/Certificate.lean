@@ -244,22 +244,59 @@ instance : Checker CROWNChecker where
 -- CLI interface
 -- ---------------------------------------------------------------------------
 
-/-- Run a certification query from a string command and return a result summary. -/
-def runCLI (modelPath queryStr : String) : IO String := do
-  -- Load model weights
-  let sd ← TorchLib.Runtime.loadCheckpoint modelPath
-  let _ := sd
-  -- Parse query (stub: returns unknown for non-robustness queries)
-  let result : CertResult := CertResult.unknown ("Parsed query: " ++ queryStr)
-  return match result with
-    | .certified lo hi =>
-        "CERTIFIED\nlo: " ++ toString lo.data ++ "\nhi: " ++ toString hi.data
-    | .violated ce =>
-        "VIOLATED\ncounter-example: " ++ toString ce.data
-    | .unknown r =>
-        "UNKNOWN: " ++ r
+/-- Reconstruct an `MLP Float` from a checkpoint `StateDict` that uses the
+    `layer{i}.weight` / `layer{i}.bias` naming convention (the one produced by
+    `Runtime.mlpModule` / `exportStateDict`).  Returns `none` if no such
+    parameters are present. -/
+def mlpOfStateDict (sd : StateDict Float) (maxLayers : Nat := 64) : Option (MLP Float) :=
+  let layers := Id.run do
+    let mut ls : Array (Linear Float) := #[]
+    let mut stop := false
+    for i in [:maxLayers] do
+      if !stop then
+        match sd.lookup s!"layer{i}.weight", sd.lookup s!"layer{i}.bias" with
+        | some w, some b => ls := ls.push { weight := w, bias := b }
+        | _, _           => stop := true
+    return ls
+  if layers.isEmpty then none
+  else
+    let last := layers.getD (layers.size - 1) { weight := Tensor.zeros [], bias := Tensor.zeros [] }
+    let outputSize := match last.weight.shape with | n :: _ => n | _ => 0
+    some { layers, dropout := { p := 0.0, training := false }, outputSize }
 
--- Re-export helper from Training for use by CLI
-private def loadCheckpoint := TorchLib.Runtime.loadCheckpoint
+/-- Format a `CertResult` for the CLI. -/
+private def formatResult : CertResult → String
+  | .certified lo hi => s!"CERTIFIED\nlo: {lo.data}\nhi: {hi.data}"
+  | .violated ce     => s!"VIOLATED\ncounter-example: {ce.data}"
+  | .unknown r       => s!"UNKNOWN: {r}"
+
+/-- Run a certification query against a checkpoint and return a result summary.
+
+    Query grammar (whitespace-separated):
+    - `robustness <eps> <class> <c0> <c1> …` — certify local ℓ∞ robustness of
+      class `<class>` in the `<eps>`-ball around the centre `c`.
+    - `bounds <eps> <c0> <c1> …` — report CROWN output bounds on the `<eps>`-ball. -/
+def runCLI (modelPath queryStr : String) : IO String := do
+  let sd ← TorchLib.Runtime.loadCheckpoint modelPath
+  match mlpOfStateDict sd with
+  | none => return "ERROR: checkpoint has no layer{i}.weight/bias parameters"
+  | some model =>
+    let toks := queryStr.splitOn " " |>.filter (· ≠ "")
+    match toks with
+    | "robustness" :: epsS :: classS :: rest =>
+      match epsS.toFloat?, classS.toNat? with
+      | some eps, some cls =>
+        let center : Tensor Float := { shape := [1, rest.length], data := (rest.filterMap String.toFloat?).toArray }
+        let checker : CROWNChecker := { model, method := .crown }
+        return formatResult (Checker.check checker (.localRobustness center eps cls))
+      | _, _ => return "ERROR: usage: robustness <eps> <class> <c0> <c1> ..."
+    | "bounds" :: epsS :: rest =>
+      match epsS.toFloat? with
+      | some eps =>
+        let center : Tensor Float := { shape := [1, rest.length], data := (rest.filterMap String.toFloat?).toArray }
+        let (lo, hi) := computeBounds .crown model center eps
+        return s!"BOUNDS\nlo: {lo.data}\nhi: {hi.data}"
+      | none => return "ERROR: usage: bounds <eps> <c0> <c1> ..."
+    | _ => return "ERROR: unknown query; expected 'robustness <eps> <class> <c..>' or 'bounds <eps> <c..>'"
 
 end TorchLib.Verification

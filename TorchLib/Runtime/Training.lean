@@ -364,12 +364,8 @@ private def parseLine (line : String) : Option (String × Tensor Float) :=
     | [] => none
     | name :: dimStrs =>
       let shape := dimStrs.filterMap (·.toNat?)
-      -- String.toFloat? not available in 4.28; use a simple parser
-      let parseFloat (s : String) : Option Float :=
-        if s.isEmpty then none
-        else some (s.toNat?.map (fun n => Float.ofNat n) |>.getD 0.0)
       let vals  := dataPart.splitOn " " |>.filter (fun s => s ≠ "" && s ≠ " ")
-                   |>.filterMap parseFloat
+                   |>.filterMap String.toFloat?
       some (name, { shape, data := vals.toArray })
   | _ => none
 

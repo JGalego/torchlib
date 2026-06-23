@@ -126,7 +126,17 @@ def vjp (op : IR.OpCode) (inputs : List (Tensor Float))
   | .softplus,[x]    =>
       let s := x.map (fun xi => 1.0 / (1.0 + Float.exp (-xi)))
       [s.zipWith (· * ·) outGrad]
-  | .gelu,    [_]    => [outGrad]  -- approximate: identity VJP (placeholder)
+  | .gelu,    [x]    =>
+      -- tanh-approx GELU: g(x) = 0.5x(1+tanh(s)), s = √(2/π)(x + 0.044715x³).
+      -- g'(x) = 0.5(1+tanh s) + 0.5x·sech²(s)·s', s' = √(2/π)(1 + 3·0.044715x²)
+      let c : Float := 0.7978845608   -- √(2/π)
+      let dg := x.map (fun xi =>
+        let s := c * (xi + 0.044715 * xi * xi * xi)
+        let th := Float.tanh s
+        let sech2 := 1.0 - th * th
+        let s' := c * (1.0 + 3.0 * 0.044715 * xi * xi)
+        0.5 * (1.0 + th) + 0.5 * xi * sech2 * s')
+      [dg.zipWith (· * ·) outGrad]
   | .silu,    [x]    =>
       -- d/dx (x σ(x)) = σ(x) + x σ(x)(1-σ(x))
       let s := x.map (fun xi => 1.0 / (1.0 + Float.exp (-xi)))
